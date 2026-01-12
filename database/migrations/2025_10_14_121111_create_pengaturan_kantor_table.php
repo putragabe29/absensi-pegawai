@@ -1,0 +1,25 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('pengaturan_kantor', function (Blueprint $table) {
+            $table->id();
+            $table->string('nama_kantor')->default('Kantor Utama');
+            $table->decimal('latitude', 10, 7)->default(-6.200000);
+            $table->decimal('longitude', 10, 7)->default(106.816666);
+            $table->integer('radius')->default(100); // meter
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('pengaturan_kantor');
+    }
+};
