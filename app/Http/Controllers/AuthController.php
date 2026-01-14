@@ -84,4 +84,34 @@ class AuthController extends Controller
 
         return redirect('/login');
     }
+    public function webviewLogin(Request $request)
+{
+    $nip = $request->query('nip');
+    $token = $request->query('token');
+
+    if (!$nip || !$token) {
+        abort(403, 'Token tidak valid');
+    }
+
+    $pegawai = Pegawai::where('nip', $nip)->first();
+
+    if (!$pegawai) {
+        abort(403, 'User tidak ditemukan');
+    }
+
+    // token sederhana (bisa kamu upgrade ke JWT nanti)
+    if (!hash_equals(sha1($pegawai->password), $token)) {
+        abort(403, 'Token salah');
+    }
+
+    Auth::login($pegawai);
+    $request->session()->regenerate();
+
+    return redirect()->to(
+        $pegawai->role === 'admin'
+            ? '/admin/dashboard'
+            : '/absensi'
+    );
+}
+
 }

@@ -21,6 +21,8 @@ Route::get('/', fn () => redirect('/login'));
 */
 Route::get('/login', [AuthController::class, 'loginPage'])->name('login');
 Route::post('/login', [AuthController::class, 'login']);
+Route::get('/webview/login', [AuthController::class, 'webviewLogin'])
+    ->name('webview.login');
 Route::get('/logout', [AuthController::class, 'logout'])->name('logout');
 
 /*

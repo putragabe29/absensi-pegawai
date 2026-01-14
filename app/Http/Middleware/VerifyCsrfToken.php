@@ -11,7 +11,8 @@ class VerifyCsrfToken extends Middleware
      *
      * @var array<int, string>
      */
-    protected $except = [
-        'api/*' // ✅ tambahkan ini agar semua endpoint API tidak dicek CSRF
-    ];
+  protected $except = [
+    '/api/*',
+    '/webview/login',
+];
 }
