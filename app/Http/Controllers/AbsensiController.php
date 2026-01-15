@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Absensi;
 use App\Models\PengaturanKantor;
+use App\Models\Pegawai;
 use Illuminate\Support\Facades\Auth;
-use Carbon\Carbon;
 
 class AbsensiController extends Controller
 {
@@ -24,20 +24,20 @@ class AbsensiController extends Controller
     }
 
     /* ======================================================
-       2. HALAMAN FORM ABSENSI + AUTO REMINDER
+       2. FORM ABSENSI
     =======================================================*/
     public function index()
     {
-        $pegawai_id = Auth::id();
-        $tanggalHariIni = date('Y-m-d');
+        $pegawaiId = Auth::id();
+        $today = date('Y-m-d');
 
-        $absenMasuk = Absensi::where('pegawai_id', $pegawai_id)
-            ->whereDate('tanggal', $tanggalHariIni)
+        $absenMasuk = Absensi::where('pegawai_id', $pegawaiId)
+            ->whereDate('tanggal', $today)
             ->where('tipe', 'Masuk')
             ->first();
 
-        $absenPulang = Absensi::where('pegawai_id', $pegawai_id)
-            ->whereDate('tanggal', $tanggalHariIni)
+        $absenPulang = Absensi::where('pegawai_id', $pegawaiId)
+            ->whereDate('tanggal', $today)
             ->where('tipe', 'Pulang')
             ->first();
 
@@ -49,15 +49,13 @@ class AbsensiController extends Controller
 
             if (!$absenMasuk &&
                 $now >= $pengaturan->jam_masuk_mulai &&
-                $now <= $pengaturan->jam_masuk_selesai
-            ) {
+                $now <= $pengaturan->jam_masuk_selesai) {
                 $reminderMessage = "⏰ Jangan lupa absensi MASUK.";
             }
 
             if ($absenMasuk && !$absenPulang &&
                 $now >= $pengaturan->jam_pulang_mulai &&
-                $now <= $pengaturan->jam_pulang_selesai
-            ) {
+                $now <= $pengaturan->jam_pulang_selesai) {
                 $reminderMessage = "⏰ Jangan lupa absensi PULANG.";
             }
         }
@@ -74,38 +72,31 @@ class AbsensiController extends Controller
     =======================================================*/
     public function simpan(Request $request)
     {
+        $request->validate([
+            'latitude'  => 'required|numeric',
+            'longitude' => 'required|numeric',
+            'tipe'      => 'required|in:Masuk,Pulang',
+            'foto'      => 'required|image|mimes:jpg,jpeg,png'
+        ]);
+
         $kantor = PengaturanKantor::first();
         if (!$kantor) {
             return back()->with('error', 'Lokasi kantor belum diatur.');
         }
 
-        /* ================= ANTI FAKE GPS ================= */
-        if (abs($request->latitude) > 90 || abs($request->longitude) > 180) {
-            return back()->with('error', '❌ Lokasi tidak valid.');
-        }
-
-        if (
-            in_array(round($request->latitude), [0,1,-1]) &&
-            in_array(round($request->longitude), [0,1,-1])
-        ) {
-            return back()->with('error', '❌ Lokasi mencurigakan (Fake GPS).');
-        }
-
-        /* ================= VALIDASI JAM ================= */
+        /* VALIDASI JAM */
         $now = date('H:i');
         if ($request->tipe === 'Masuk' &&
-            ($now < $kantor->jam_masuk_mulai || $now > $kantor->jam_masuk_selesai)
-        ) {
+            ($now < $kantor->jam_masuk_mulai || $now > $kantor->jam_masuk_selesai)) {
             return back()->with('error', '⛔ Di luar jam absensi masuk.');
         }
 
         if ($request->tipe === 'Pulang' &&
-            ($now < $kantor->jam_pulang_mulai || $now > $kantor->jam_pulang_selesai)
-        ) {
+            ($now < $kantor->jam_pulang_mulai || $now > $kantor->jam_pulang_selesai)) {
             return back()->with('error', '⛔ Di luar jam absensi pulang.');
         }
 
-        /* ================= VALIDASI JARAK ================= */
+        /* VALIDASI JARAK */
         $jarak = $this->hitungJarak(
             $request->latitude,
             $request->longitude,
@@ -117,24 +108,11 @@ class AbsensiController extends Controller
             return back()->with('error', '❌ Di luar radius kantor.');
         }
 
-        /* ================= WAJIB SELFIE KAMERA ================= */
-        if (!$request->hasFile('foto')) {
-            return back()->with('error', '❌ Foto selfie wajib diambil dari kamera.');
-        }
-
-        $foto = $request->file('foto');
-        $exif = @exif_read_data($foto->getPathname());
-
-        if (!$exif || empty($exif['Make'])) {
-            return back()->with('error', '❌ Foto harus dari kamera, bukan galeri.');
-        }
-
-        /* ================= SIMPAN ================= */
-        $pegawaiId = Auth::id();
-        $fotoPath = $foto->store('foto_absen', 'public');
+        /* SIMPAN FOTO */
+        $fotoPath = $request->file('foto')->store('foto_absen', 'public');
 
         Absensi::create([
-            'pegawai_id' => $pegawaiId,
+            'pegawai_id' => Auth::id(),
             'tanggal'    => date('Y-m-d'),
             'jam'        => date('H:i:s'),
             'foto'       => $fotoPath,
@@ -153,63 +131,41 @@ class AbsensiController extends Controller
     =======================================================*/
     public function simpanAjax(Request $request)
     {
-         $request->validate([
-        'nip' => 'required',
-        'latitude' => 'required',
-        'longitude' => 'required',
-        'tipe' => 'required|in:Masuk,Pulang',
-        'foto' => 'required|image',
-    ]);
+        $request->validate([
+            'nip'       => 'required',
+            'latitude'  => 'required|numeric',
+            'longitude' => 'required|numeric',
+            'tipe'      => 'required|in:Masuk,Pulang',
+            'foto'      => 'required|image|mimes:jpg,jpeg,png'
+        ]);
 
-    // 🔥 AMBIL PEGAWAI DARI NIP (BUKAN Auth)
-    $pegawai = \App\Models\Pegawai::where('nip', $request->nip)->first();
+        $pegawai = Pegawai::where('nip', $request->nip)->first();
+        if (!$pegawai) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pegawai tidak ditemukan'
+            ], 404);
+        }
 
-    if (!$pegawai) {
+        $fotoPath = $request->file('foto')->store('foto_absen', 'public');
+
+        $absen = Absensi::create([
+            'pegawai_id' => $pegawai->id,
+            'tanggal'    => date('Y-m-d'),
+            'jam'        => date('H:i:s'),
+            'foto'       => $fotoPath,
+            'latitude'   => $request->latitude,
+            'longitude'  => $request->longitude,
+            'jarak'      => 0,
+            'status'     => 'Hadir',
+            'tipe'       => $request->tipe,
+        ]);
+
         return response()->json([
-            'success' => false,
-            'message' => 'Pegawai tidak ditemukan'
-        ], 404);
-    }
-
-    // 🔒 VALIDASI FOTO KAMERA
-    $foto = $request->file('foto');
-    $exif = @exif_read_data($foto->getPathname());
-
-    if (!$exif || empty($exif['Make'])) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Foto harus dari kamera'
-        ], 403);
-    }
-
-    // 📍 VALIDASI LOKASI
-    if (abs($request->latitude) > 90 || abs($request->longitude) > 180) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Lokasi tidak valid'
-        ], 400);
-    }
-
-    $fotoPath = $foto->store('foto_absen', 'public');
-
-    $absen = Absensi::create([
-        'pegawai_id' => $pegawai->id,
-        'tanggal'    => date('Y-m-d'),
-        'jam'        => date('H:i:s'),
-        'foto'       => $fotoPath,
-        'latitude'   => $request->latitude,
-        'longitude'  => $request->longitude,
-        'jarak'      => 0,
-        'status'     => 'Hadir',
-        'tipe'       => $request->tipe,
-    ]);
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Absensi berhasil',
-        'jam' => $absen->jam
-    ]);
-
+            'success' => true,
+            'message' => 'Absensi berhasil',
+            'jam'     => $absen->jam
+        ]);
     }
 
     /* ======================================================

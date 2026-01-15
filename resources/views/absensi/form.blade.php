@@ -86,103 +86,74 @@
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    // Ambil lokasi otomatis
-    function ambilLokasi() {
-        if (!navigator.geolocation) {
-            document.getElementById('lokasi-info').innerHTML =
-                '❌ Browser tidak mendukung GPS.';
-            return;
-        }
+document.getElementById('formAbsensi').addEventListener('submit', async function (e) {
+    e.preventDefault();
 
-        navigator.geolocation.getCurrentPosition(
-            function (pos) {
-                let lat = pos.coords.latitude;
-                let lng = pos.coords.longitude;
+    const lat = document.getElementById('latitude').value;
+    const lng = document.getElementById('longitude').value;
 
-                document.getElementById('latitude').value = lat;
-                document.getElementById('longitude').value = lng;
-
-                document.getElementById('lokasi-info').innerHTML =
-                    '✅ Lokasi terdeteksi: ' +
-                    lat.toFixed(5) + ', ' + lng.toFixed(5);
-            },
-            function (error) {
-                document.getElementById('lokasi-info').innerHTML =
-                    '⚠️ Gagal mendeteksi lokasi. Aktifkan GPS & izinkan lokasi untuk browser / aplikasi.';
-            },
-            { enableHighAccuracy: true, timeout: 12000 }
-        );
+    if (!lat || !lng) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Lokasi belum terdeteksi',
+            text: 'Pastikan GPS aktif dan lokasi sudah diizinkan.',
+            confirmButtonColor: '#F47C20'
+        });
+        return;
     }
 
-    window.onload = ambilLokasi;
+    const formData = new FormData(this);
 
-    // Submit pakai AJAX (route: absen.simpanAjax)
-    document.getElementById('formAbsensi').addEventListener('submit', async function (e) {
-        e.preventDefault();
+    Swal.fire({
+        title: 'Memproses...',
+        text: 'Sedang mengirim data absensi...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
 
-        const lat = document.getElementById('latitude').value;
-        const lng = document.getElementById('longitude').value;
-
-        if (!lat || !lng) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Lokasi belum terdeteksi',
-                text: 'Pastikan GPS aktif dan lokasi sudah diizinkan.',
-                confirmButtonColor: '#F47C20'
-            });
-            return;
-        }
-
-        const formData = new FormData(this);
-
-        Swal.fire({
-            title: 'Memproses...',
-            text: 'Sedang mengirim data absensi...',
-            allowOutsideClick: false,
-            didOpen: () => Swal.showLoading()
+    try {
+        const response = await fetch("{{ route('absen.simpanAjax') }}", {
+            method: "POST",
+            headers: {
+                "X-CSRF-TOKEN": document.querySelector('input[name="_token"]').value
+            },
+            body: formData
         });
 
-        try {
-            const response = await fetch("{{ route('absen.simpanAjax') }}", {
-                method: "POST",
-                headers: {
-                    "X-CSRF-TOKEN": document.querySelector('input[name="_token"]').value
-                },
-                body: formData
-            });
+        const data = await response.json();
+        Swal.close();
 
-            const data = await response.json();
-            Swal.close();
-
-            if (response.ok) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Berhasil!',
-                    html: `${data.pesan}<br>🕒 <b>Waktu:</b> ${data.jam} WIB`,
-                    confirmButtonColor: '#F47C20'
-                });
-                this.reset();
-                ambilLokasi();
-            } else {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Peringatan',
-                    text: data.error || 'Terjadi kesalahan saat absensi.',
-                    confirmButtonColor: '#F47C20'
-                });
-            }
-
-        } catch (err) {
-            Swal.close();
+        if (response.ok && data.success) {
             Swal.fire({
-                icon: 'error',
-                title: 'Kesalahan',
-                text: 'Gagal menghubungi server.',
+                icon: 'success',
+                title: 'Berhasil!',
+                html: `${data.message}<br>🕒 <b>Waktu:</b> ${data.jam} WIB`,
                 confirmButtonColor: '#F47C20'
             });
-            console.error(err);
+
+            this.reset();
+            ambilLokasi();
+        } else {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Gagal',
+                text: data.message || 'Terjadi kesalahan saat absensi.',
+                confirmButtonColor: '#F47C20'
+            });
         }
-    });
+
+    } catch (err) {
+        Swal.close();
+        Swal.fire({
+            icon: 'error',
+            title: 'Kesalahan',
+            text: 'Gagal menghubungi server.',
+            confirmButtonColor: '#F47C20'
+        });
+        console.error(err);
+    }
+});
 </script>
+
 @endpush
 @endsection
