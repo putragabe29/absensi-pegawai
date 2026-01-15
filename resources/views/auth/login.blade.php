@@ -1,4 +1,4 @@
-@extends('layouts.empty')
+@extends('layouts.empty') {{-- Layout polos tanpa navbar --}}
 
 @section('content')
 <style>
@@ -6,47 +6,33 @@
         --primary: #F47C20;
         --primary-dark: #D96516;
         --gold: #FFD180;
-        --card-light: #ffffff;
-        --card-dark: #2A2A2A;
+        --bg-light: #fff;
+        --bg-dark: #1E1E1E;
         --text-light: #333;
         --text-dark: #f1f1f1;
+        --card-light: #ffffff;
+        --card-dark: #2A2A2A;
     }
 
-    html, body {
-        height: 100%;
-        margin: 0;
-    }
-
-    /* CENTER PALING AMAN UNTUK WEBVIEW */
-    body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
-        background: linear-gradient(135deg, #F47C20, #FF9F4A, #FFD180);
-    }
-
+    /* Auto dark mode */
     body.dark {
         background: linear-gradient(135deg, #1E1E1E, #2A2A2A);
         color: var(--text-dark);
     }
 
     body.light {
+        background: linear-gradient(135deg, #F47C20, #FF9F4A, #FFD180);
         color: var(--text-light);
-    }
-
-    .login-wrapper {
-        width: 100%;
-        max-width: 420px;
-        padding: 16px;
     }
 
     .login-card {
         background: var(--card-light);
         border-radius: 20px;
-        padding: 32px 26px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.18);
-        width: 100%;
+        padding: 35px;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+        max-width: 420px;
+        width: 90%;
+        margin: 60px auto;
         transition: 0.3s;
     }
 
@@ -56,17 +42,17 @@
     }
 
     .title {
-        font-size: 26px;
+        font-size: 28px;
         font-weight: 700;
         text-align: center;
+        margin-bottom: 5px;
         color: var(--primary);
-        margin-bottom: 4px;
     }
 
     .subtitle {
         text-align: center;
         opacity: 0.8;
-        margin-bottom: 22px;
+        margin-bottom: 25px;
     }
 
     .btn-login {
@@ -78,64 +64,66 @@
         font-weight: 600;
         border-radius: 12px;
         margin-top: 10px;
+        transition: 0.2s;
     }
 
-    /* DARK MODE BUTTON */
+    .btn-login:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+    }
+
+    /* Toggle dark mode */
     .dark-toggle {
-        position: fixed;
-        top: 16px;
-        right: 16px;
+        position: absolute;
+        top: 20px;
+        right: 20px;
         background: #fff;
         border-radius: 50%;
-        width: 42px;
-        height: 42px;
+        width: 45px;
+        height: 45px;
         display: flex;
-        align-items: center;
         justify-content: center;
+        align-items: center;
         cursor: pointer;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.25);
-        z-index: 10;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }
-
     body.dark .dark-toggle {
         background: #333;
         color: #fff;
     }
+
 </style>
 
-<div class="dark-toggle" onclick="toggleDarkMode()">🌙</div>
+<div class="dark-toggle" onclick="toggleDarkMode()">
+    🌙
+</div>
 
-<div class="login-wrapper">
-    <div class="login-card">
+<div class="login-card">
+    <div class="title">Aplikasi Absensi</div>
+    <div class="subtitle">KPU Kabupaten — Login Pegawai</div>
 
-        <div class="title">Aplikasi Absensi</div>
-        <div class="subtitle">KPU Kabupaten — Login Pegawai</div>
+    {{-- ALERT --}}
+    @if(session('error'))
+        <div class="alert alert-danger text-center">{{ session('error') }}</div>
+    @endif
 
-        @if(session('error'))
-            <div class="alert alert-danger text-center">
-                {{ session('error') }}
-            </div>
-        @endif
+    <form method="POST" action="{{ route('login') }}">
+        @csrf
 
-        <form method="POST" action="{{ route('login') }}">
-            @csrf
+        <div class="mb-3">
+            <label class="fw-semibold">NIP</label>
+            <input type="text" name="nip" class="form-control form-control-lg" required>
+        </div>
 
-            <div class="mb-3">
-                <label class="fw-semibold">NIP</label>
-                <input type="text" name="nip" class="form-control form-control-lg" required>
-            </div>
+        <div class="mb-3">
+            <label class="fw-semibold">Password</label>
+            <input type="password" name="password" class="form-control form-control-lg" required>
+        </div>
 
-            <div class="mb-3">
-                <label class="fw-semibold">Password</label>
-                <input type="password" name="password" class="form-control form-control-lg" required>
-            </div>
-
-            <button type="submit" class="btn-login">
-                🔐 Masuk
-            </button>
-        </form>
-
-    </div>
+        <button type="submit" class="btn-login">
+            🔐 Masuk Sekarang
+        </button>
+    </form>
 </div>
 
 <script>
@@ -146,6 +134,8 @@
         localStorage.setItem("theme", mode);
     }
 
+    // Load theme
     document.body.className = localStorage.getItem("theme") || "light";
 </script>
+
 @endsection
