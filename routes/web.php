@@ -32,12 +32,8 @@ Route::get('/logout', [AuthController::class, 'logout'])->name('logout');
 */
 Route::middleware('auth')->group(function () {
 
+    // HALAMAN ABSENSI (GET SAJA)
     Route::get('/absensi', [AbsensiController::class, 'index']);
-    Route::post('/absensi', [AbsensiController::class, 'simpan'])
-        ->name('absen.simpan');
-
-    Route::post('/absensi/ajax', [AbsensiController::class, 'simpanAjax'])
-        ->name('absen.simpanAjax');
 
     Route::get('/riwayat', [AbsensiController::class, 'riwayatPegawai'])
         ->name('pegawai.riwayat');
