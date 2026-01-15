@@ -112,9 +112,7 @@ document.getElementById('formAbsensi').addEventListener('submit', async function
     });
 
     try {
-       const response = await fetch("{{ route('absen.simpanAjax') }}", {
-    method: "POST",
-    credentials: "same-origin", // 🔥 PENTING
+      
     headers: {
         "X-CSRF-TOKEN": document.querySelector('input[name="_token"]').value
     },
