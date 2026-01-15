@@ -153,42 +153,63 @@ class AbsensiController extends Controller
     =======================================================*/
     public function simpanAjax(Request $request)
     {
-        if (!auth()->check()) {
-    return response()->json([
-        'error' => 'Sesi telah habis. Silakan login ulang.'
-    ], 401);
-}
+         $request->validate([
+        'nip' => 'required',
+        'latitude' => 'required',
+        'longitude' => 'required',
+        'tipe' => 'required|in:Masuk,Pulang',
+        'foto' => 'required|image',
+    ]);
 
-        if (!$request->hasFile('foto')) {
-            return response()->json(['error' => 'Foto wajib dari kamera.'], 400);
-        }
+    // 🔥 AMBIL PEGAWAI DARI NIP (BUKAN Auth)
+    $pegawai = \App\Models\Pegawai::where('nip', $request->nip)->first();
 
-        $foto = $request->file('foto');
-        $exif = @exif_read_data($foto->getPathname());
-
-        if (!$exif || empty($exif['Make'])) {
-            return response()->json(['error' => 'Foto bukan dari kamera.'], 403);
-        }
-
-        $fotoPath = $foto->store('foto_absen', 'public');
-
-        $absen = Absensi::create([
-            'pegawai_id' => Auth::id(),
-            'tanggal'    => date('Y-m-d'),
-            'jam'        => date('H:i:s'),
-            'foto'       => $fotoPath,
-            'latitude'   => $request->latitude,
-            'longitude'  => $request->longitude,
-            'jarak'      => 0,
-            'status'     => 'Hadir',
-            'tipe'       => $request->tipe ?? 'Masuk',
-        ]);
-
+    if (!$pegawai) {
         return response()->json([
-            'success' => true,
-            'pesan' => 'Absensi berhasil',
-            'jam' => $absen->jam
-        ]);
+            'success' => false,
+            'message' => 'Pegawai tidak ditemukan'
+        ], 404);
+    }
+
+    // 🔒 VALIDASI FOTO KAMERA
+    $foto = $request->file('foto');
+    $exif = @exif_read_data($foto->getPathname());
+
+    if (!$exif || empty($exif['Make'])) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Foto harus dari kamera'
+        ], 403);
+    }
+
+    // 📍 VALIDASI LOKASI
+    if (abs($request->latitude) > 90 || abs($request->longitude) > 180) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Lokasi tidak valid'
+        ], 400);
+    }
+
+    $fotoPath = $foto->store('foto_absen', 'public');
+
+    $absen = Absensi::create([
+        'pegawai_id' => $pegawai->id,
+        'tanggal'    => date('Y-m-d'),
+        'jam'        => date('H:i:s'),
+        'foto'       => $fotoPath,
+        'latitude'   => $request->latitude,
+        'longitude'  => $request->longitude,
+        'jarak'      => 0,
+        'status'     => 'Hadir',
+        'tipe'       => $request->tipe,
+    ]);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Absensi berhasil',
+        'jam' => $absen->jam
+    ]);
+
     }
 
     /* ======================================================
