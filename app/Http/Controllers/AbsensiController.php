@@ -7,6 +7,7 @@ use App\Models\Absensi;
 use App\Models\Pegawai;
 use App\Models\PengaturanKantor;
 use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class AbsensiController extends Controller
 {
@@ -16,7 +17,7 @@ class AbsensiController extends Controller
     public function index()
     {
         $pegawaiId = Auth::id();
-        $today = date('Y-m-d');
+        $today = Carbon::now('Asia/Jakarta')->toDateString();
 
         $absenMasuk = Absensi::where('pegawai_id', $pegawaiId)
             ->whereDate('tanggal', $today)
@@ -104,23 +105,26 @@ class AbsensiController extends Controller
 
         $fotoPath = $request->file('foto')->store('foto_absen', 'public');
 
-        $absen = Absensi::create([
-            'pegawai_id' => $pegawai->id,
-            'tanggal'    => date('Y-m-d'),
-            'jam'        => date('H:i:s'),
-            'foto'       => $fotoPath,
-            'latitude'   => $request->latitude,
-            'longitude'  => $request->longitude,
-            'jarak'      => $jarak,
-            'status'     => 'Hadir',
-            'tipe'       => $request->tipe,
-        ]);
+        $now = Carbon::now('Asia/Jakarta');
+
+$absen = Absensi::create([
+    'pegawai_id' => $pegawai->id,
+    'tanggal'    => $now->toDateString(), // YYYY-MM-DD
+    'jam'        => $now->toTimeString(), // HH:MM:SS
+    'foto'       => $fotoPath,
+    'latitude'   => $request->latitude,
+    'longitude'  => $request->longitude,
+    'jarak'      => $jarak,
+    'status'     => 'Hadir',
+    'tipe'       => $request->tipe,
+]);
 
         return response()->json([
             'success' => true,
             'message' => 'Absensi berhasil',
             'jam'     => $absen->jam
         ]);
+        
     }
 
     /* ======================================================
