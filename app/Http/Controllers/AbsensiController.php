@@ -55,76 +55,52 @@ class AbsensiController extends Controller
     =======================================================*/
     public function simpanAjax(Request $request)
     {
-        $request->validate([
-            'nip'       => 'required',
-            'latitude'  => 'required|numeric',
-            'longitude' => 'required|numeric',
-            'tipe'      => 'required|in:Masuk,Pulang',
-            'foto'      => 'required|image|mimes:jpg,jpeg,png'
-        ]);
+       $request->validate([
+        'nip' => 'required',
+        'latitude' => 'required',
+        'longitude' => 'required',
+        'tipe' => 'required|in:Masuk,Pulang',
+        'foto' => 'required|image|max:4096',
+    ]);
 
-        $pegawai = Pegawai::where('nip', $request->nip)->first();
-        if (!$pegawai) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Pegawai tidak ditemukan'
-            ], 404);
-        }
-
-        $kantor = PengaturanKantor::first();
-        if ($kantor) {
-            $jarak = $this->hitungJarak(
-                $request->latitude,
-                $request->longitude,
-                $kantor->latitude,
-                $kantor->longitude
-            );
-
-            if ($jarak > $kantor->radius) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Di luar radius kantor'
-                ], 403);
-            }
-        } else {
-            $jarak = 0;
-        }
-
-        // Cegah double absensi
-        $cek = Absensi::where('pegawai_id', $pegawai->id)
-            ->whereDate('tanggal', date('Y-m-d'))
-            ->where('tipe', $request->tipe)
-            ->first();
-
-        if ($cek) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Absensi ' . $request->tipe . ' sudah dilakukan'
-            ], 409);
-        }
-
-        $fotoPath = $request->file('foto')->store('foto_absen', 'public');
-
-        $now = Carbon::now('Asia/Jakarta');
-
-$absen = Absensi::create([
-    'pegawai_id' => $pegawai->id,
-    'tanggal'    => $now->toDateString(), // YYYY-MM-DD
-    'jam'        => $now->toTimeString(), // HH:MM:SS
-    'foto'       => $fotoPath,
-    'latitude'   => $request->latitude,
-    'longitude'  => $request->longitude,
-    'jarak'      => $jarak,
-    'status'     => 'Hadir',
-    'tipe'       => $request->tipe,
-]);
-
+    $pegawai = \App\Models\Pegawai::where('nip', $request->nip)->first();
+    if (!$pegawai) {
         return response()->json([
-            'success' => true,
-            'message' => 'Absensi berhasil',
-            'jam'     => $absen->jam
-        ]);
-        
+            'success' => false,
+            'message' => 'Pegawai tidak ditemukan'
+        ], 404);
+    }
+
+    // 🔥 WAJIB FOTO DARI KAMERA
+    $foto = $request->file('foto');
+    $exif = @exif_read_data($foto->getPathname());
+
+    if (!$exif || empty($exif['Make']) || empty($exif['Model'])) {
+        return response()->json([
+            'success' => false,
+            'message' => '❌ Foto wajib diambil langsung dari kamera selfie'
+        ], 403);
+    }
+
+    $fotoPath = $foto->store('foto_absen', 'public');
+
+    $absen = \App\Models\Absensi::create([
+        'pegawai_id' => $pegawai->id,
+        'tanggal' => now()->toDateString(),
+        'jam' => now()->format('H:i:s'),
+        'foto' => $fotoPath,
+        'latitude' => $request->latitude,
+        'longitude' => $request->longitude,
+        'jarak' => 0,
+        'status' => 'Hadir',
+        'tipe' => $request->tipe,
+    ]);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Absensi berhasil',
+        'jam' => $absen->jam
+    ]); 
     }
 
     /* ======================================================

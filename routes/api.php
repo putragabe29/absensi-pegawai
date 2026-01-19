@@ -9,47 +9,22 @@ use App\Models\PengaturanKantor;
 |--------------------------------------------------------------------------
 | API Routes
 |--------------------------------------------------------------------------
-| Semua route API diletakkan di sini. File ini akan otomatis memakai
-| middleware "api" sesuai konfigurasi Laravel.
+| Semua route API (TANPA CSRF, TANPA SESSION)
 |--------------------------------------------------------------------------
-*/Route::post('/cek-radius', function (\Illuminate\Http\Request $request) {
-    $kantor = \App\Models\PengaturanKantor::first();
-
-    if (!$kantor) {
-        return response()->json(['error' => 'Lokasi kantor belum diatur'], 500);
-    }
-
-    $lat1 = deg2rad($request->latitude);
-    $lon1 = deg2rad($request->longitude);
-    $lat2 = deg2rad($kantor->latitude);
-    $lon2 = deg2rad($kantor->longitude);
-
-    $R = 6371000;
-    $jarak = $R * acos(
-        cos($lat1) * cos($lat2) * cos($lon2 - $lon1) +
-        sin($lat1) * sin($lat2)
-    );
-
-    return response()->json([
-        'dalam_radius' => $jarak <= $kantor->radius,
-        'jarak' => round($jarak),
-        'radius' => $kantor->radius
-    ]);
-});
-
+*/
 
 // ===============================
-// LOGIN API
+// LOGIN API (ANDROID / AJAX)
 // ===============================
-Route::post('/login', [AuthController::class, 'apiLogin'])->name('api.login');
+Route::post('/login', [AuthController::class, 'apiLogin']);
 
 // ===============================
-// ABSENSI API (Android / WebView)
+// ABSENSI API (SELFIE WAJIB)
 // ===============================
-Route::post('/absensi', [AbsensiController::class, 'simpanAjax'])->name('api.absensi');
+Route::post('/absensi', [AbsensiController::class, 'simpanAjax']);
 
 // ===============================
-// GET LOKASI KANTOR
+// LOKASI KANTOR (RADIUS)
 // ===============================
 Route::get('/lokasi-kantor', function () {
     $kantor = PengaturanKantor::first();
@@ -59,4 +34,4 @@ Route::get('/lokasi-kantor', function () {
         'longitude' => $kantor->longitude ?? 0,
         'radius'    => $kantor->radius ?? 0,
     ]);
-})->name('api.lokasi.kantor');
+});
