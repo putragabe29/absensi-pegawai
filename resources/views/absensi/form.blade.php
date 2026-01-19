@@ -75,82 +75,123 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-let kantor, map, markerUser, circle;
+let kantor = null;
+let map, markerUser, circleRadius;
 
-fetch('/api/lokasi-kantor')
-  .then(r => r.json())
-  .then(d => {
-    kantor = d;
-    map = L.map('map').setView([d.latitude, d.longitude], 17);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-    L.marker([d.latitude, d.longitude]).addTo(map).bindPopup('Kantor');
-    circle = L.circle([d.latitude, d.longitude], {
-        radius: d.radius, color:'green', fillOpacity:0.15
-    }).addTo(map);
-  });
+/* ================= AMBIL DATA KANTOR ================= */
+async function loadKantor() {
+    try {
+        const res = await fetch('/api/lokasi-kantor');
+        kantor = await res.json();
 
-function hitungJarak(a,b,c,d){
-    const R=6371000;
-    const dLat=(c-a)*Math.PI/180;
-    const dLon=(d-b)*Math.PI/180;
-    const x=Math.sin(dLat/2)**2+
-      Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*
-      Math.sin(dLon/2)**2;
-    return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+        initMap();
+        startGPS();
+
+    } catch (e) {
+        Swal.fire('Error', 'Gagal memuat lokasi kantor', 'error');
+    }
 }
 
-navigator.geolocation.watchPosition(pos=>{
-    const lat=pos.coords.latitude;
-    const lng=pos.coords.longitude;
-    latitude.value=lat;
-    longitude.value=lng;
+/* ================= INIT MAP ================= */
+function initMap() {
+    map = L.map('map').setView(
+        [kantor.latitude, kantor.longitude], 17
+    );
 
-    if(!markerUser){
-        markerUser=L.marker([lat,lng]).addTo(map);
-    } else {
-        markerUser.setLatLng([lat,lng]);
-    }
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
 
-    const jarak=hitungJarak(lat,lng,kantor.latitude,kantor.longitude);
-    lokasi-info.innerText=`📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    jarak-info.innerText=`📏 ${Math.round(jarak)} meter`;
+    L.marker([kantor.latitude, kantor.longitude])
+        .addTo(map)
+        .bindPopup('🏢 Kantor');
 
-    if(jarak<=kantor.radius){
-        radius-info.innerHTML='🟢 Dalam radius absensi';
-        btnSubmit.disabled=false;
-        circle.setStyle({color:'green'});
-    } else {
-        radius-info.innerHTML='🔴 Di luar radius absensi';
-        btnSubmit.disabled=true;
-        circle.setStyle({color:'red'});
-    }
-});
-
-formAbsensi.addEventListener('submit', async e=>{
-    e.preventDefault();
-    btnSubmit.disabled=true;
-
-    Swal.fire({title:'Mengirim...',didOpen:()=>Swal.showLoading()});
-
-    try{
-        const res=await fetch('/api/absensi',{
-            method:'POST',
-            body:new FormData(formAbsensi)
-        });
-        const data=JSON.parse(await res.text());
-        Swal.close();
-
-        if(data.success){
-            Swal.fire('Berhasil',data.message+' '+data.jam,'success')
-              .then(()=>location.reload());
-        } else {
-            btnSubmit.disabled=false;
-            Swal.fire('Gagal',data.message,'warning');
+    circleRadius = L.circle(
+        [kantor.latitude, kantor.longitude],
+        {
+            radius: kantor.radius,
+            color: 'green',
+            fillOpacity: 0.15
         }
-    }catch{
-        btnSubmit.disabled=false;
-        Swal.fire('Error','Gagal menghubungi server','error');
+    ).addTo(map);
+}
+
+/* ================= HITUNG JARAK ================= */
+function hitungJarak(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+
+    const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) ** 2;
+
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/* ================= START GPS ================= */
+function startGPS() {
+    if (!navigator.geolocation) {
+        Swal.fire('Error', 'Browser tidak mendukung GPS', 'error');
+        return;
     }
-});
+
+    navigator.geolocation.watchPosition(
+        pos => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+
+            document.getElementById('latitude').value = lat;
+            document.getElementById('longitude').value = lng;
+
+            if (!markerUser) {
+                markerUser = L.marker([lat, lng]).addTo(map);
+            } else {
+                markerUser.setLatLng([lat, lng]);
+            }
+
+            const jarak = hitungJarak(
+                lat, lng,
+                kantor.latitude, kantor.longitude
+            );
+
+            document.getElementById('lokasi-info').innerText =
+                `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+            document.getElementById('jarak-info').innerText =
+                `📏 Jarak: ${Math.round(jarak)} meter`;
+
+            const info = document.getElementById('radius-info');
+            const btn = document.getElementById('btnSubmit');
+
+            if (jarak <= kantor.radius) {
+                info.innerHTML = '🟢 Dalam radius absensi';
+                circleRadius.setStyle({ color: 'green' });
+                btn.disabled = false;
+            } else {
+                info.innerHTML = '🔴 Di luar radius absensi';
+                circleRadius.setStyle({ color: 'red' });
+                btn.disabled = true;
+            }
+        },
+        err => {
+            Swal.fire(
+                'GPS Error',
+                'Aktifkan GPS & izinkan lokasi',
+                'error'
+            );
+        },
+        {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 15000
+        }
+    );
+}
+
+/* ================= START ================= */
+document.addEventListener('DOMContentLoaded', loadKantor);
 </script>
 @endsection
