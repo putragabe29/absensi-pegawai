@@ -75,123 +75,56 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-let kantor = null;
-let map, markerUser, circleRadius;
+document.getElementById('formAbsensi').addEventListener('submit', async function (e) {
+    e.preventDefault();
 
-/* ================= AMBIL DATA KANTOR ================= */
-async function loadKantor() {
+    const btn = document.getElementById('btnSubmit');
+    btn.disabled = true;
+
+    Swal.fire({
+        title: 'Mengirim absensi...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+
     try {
-        const res = await fetch('/api/lokasi-kantor');
-        kantor = await res.json();
+        const res = await fetch('/api/absensi', {
+            method: 'POST',
+            body: new FormData(this)
+        });
 
-        initMap();
-        startGPS();
+        const text = await res.text();
+        let data;
 
-    } catch (e) {
-        Swal.fire('Error', 'Gagal memuat lokasi kantor', 'error');
-    }
-}
-
-/* ================= INIT MAP ================= */
-function initMap() {
-    map = L.map('map').setView(
-        [kantor.latitude, kantor.longitude], 17
-    );
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
-    }).addTo(map);
-
-    L.marker([kantor.latitude, kantor.longitude])
-        .addTo(map)
-        .bindPopup('🏢 Kantor');
-
-    circleRadius = L.circle(
-        [kantor.latitude, kantor.longitude],
-        {
-            radius: kantor.radius,
-            color: 'green',
-            fillOpacity: 0.15
+        try {
+            data = JSON.parse(text);
+        } catch {
+            throw new Error('Response bukan JSON');
         }
-    ).addTo(map);
-}
 
-/* ================= HITUNG JARAK ================= */
-function hitungJarak(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
+        Swal.close();
 
-    const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos(lat1 * Math.PI / 180) *
-        Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) ** 2;
-
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-/* ================= START GPS ================= */
-function startGPS() {
-    if (!navigator.geolocation) {
-        Swal.fire('Error', 'Browser tidak mendukung GPS', 'error');
-        return;
-    }
-
-    navigator.geolocation.watchPosition(
-        pos => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-
-            document.getElementById('latitude').value = lat;
-            document.getElementById('longitude').value = lng;
-
-            if (!markerUser) {
-                markerUser = L.marker([lat, lng]).addTo(map);
-            } else {
-                markerUser.setLatLng([lat, lng]);
-            }
-
-            const jarak = hitungJarak(
-                lat, lng,
-                kantor.latitude, kantor.longitude
-            );
-
-            document.getElementById('lokasi-info').innerText =
-                `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-
-            document.getElementById('jarak-info').innerText =
-                `📏 Jarak: ${Math.round(jarak)} meter`;
-
-            const info = document.getElementById('radius-info');
-            const btn = document.getElementById('btnSubmit');
-
-            if (jarak <= kantor.radius) {
-                info.innerHTML = '🟢 Dalam radius absensi';
-                circleRadius.setStyle({ color: 'green' });
-                btn.disabled = false;
-            } else {
-                info.innerHTML = '🔴 Di luar radius absensi';
-                circleRadius.setStyle({ color: 'red' });
-                btn.disabled = true;
-            }
-        },
-        err => {
-            Swal.fire(
-                'GPS Error',
-                'Aktifkan GPS & izinkan lokasi',
-                'error'
-            );
-        },
-        {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 15000
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Berhasil',
+                text: data.message + ' (' + data.jam + ')'
+            }).then(() => location.reload());
+        } else {
+            Swal.fire('Gagal', data.message, 'warning');
+            btn.disabled = false;
         }
-    );
-}
 
-/* ================= START ================= */
-document.addEventListener('DOMContentLoaded', loadKantor);
+    } catch (err) {
+        Swal.close();
+        Swal.fire(
+            'Error',
+            'Server tidak merespon',
+            'error'
+        );
+        btn.disabled = false;
+        console.error(err);
+    }
+});
 </script>
 @endsection
