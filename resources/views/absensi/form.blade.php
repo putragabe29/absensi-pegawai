@@ -80,120 +80,61 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-let kantor = null;
-let map = null;
-let markerUser = null;
-let circleRadius = null;
+document.getElementById('formAbsensi').addEventListener('submit', async function (e) {
+    e.preventDefault();
 
-/* ================= AMBIL DATA KANTOR ================= */
-fetch('/api/lokasi-kantor')
-  .then(res => res.json())
-  .then(data => {
-    kantor = data;
-    initMap();
-    startGPS();
-  })
-  .catch(() => {
-    Swal.fire('Error','Gagal mengambil data kantor','error');
-  });
+    const btn = document.getElementById('btnSubmit');
+    btn.disabled = true;
 
-/* ================= INIT MAP ================= */
-function initMap() {
-    map = L.map('map').setView(
-        [kantor.latitude, kantor.longitude], 17
-    );
+    Swal.fire({
+        title: 'Mengirim Absensi...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19
-    }).addTo(map);
+    try {
+        const res = await fetch('/api/absensi', {
+            method: 'POST',
+            body: new FormData(this)
+        });
 
-    L.marker([kantor.latitude, kantor.longitude])
-      .addTo(map)
-      .bindPopup('🏢 Lokasi Kantor');
+        const text = await res.text(); // ⬅️ AMAN
+        let data;
 
-    circleRadius = L.circle(
-        [kantor.latitude, kantor.longitude],
-        {
-            radius: kantor.radius,
-            color: 'green',
-            fillOpacity: 0.2
+        try {
+            data = JSON.parse(text);
+        } catch {
+            throw new Error('Response bukan JSON');
         }
-    ).addTo(map);
-}
 
-/* ================= HITUNG JARAK ================= */
-function hitungJarak(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
-    const dLat = (lat2-lat1)*Math.PI/180;
-    const dLon = (lon2-lon1)*Math.PI/180;
-    const a =
-        Math.sin(dLat/2)**2 +
-        Math.cos(lat1*Math.PI/180) *
-        Math.cos(lat2*Math.PI/180) *
-        Math.sin(dLon/2)**2;
+        Swal.close();
 
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Berhasil',
+                html: `
+                    <b>${data.message}</b><br>
+                    🕒 ${data.jam} WIB
+                `
+            }).then(() => {
+                location.reload(); // 🔥 WAJIB
+            });
+        } else {
+            btn.disabled = false;
+            Swal.fire('Gagal', data.message, 'warning');
+        }
 
-/* ================= GPS ================= */
-function startGPS() {
-    if (!navigator.geolocation) {
-        Swal.fire('Error','Browser tidak mendukung GPS','error');
-        return;
+    } catch (err) {
+        btn.disabled = false;
+        Swal.close();
+        Swal.fire(
+            'Error',
+            'Gagal menghubungi server',
+            'error'
+        );
+        console.error(err);
     }
-
-    navigator.geolocation.watchPosition(
-        pos => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-
-            document.getElementById('latitude').value = lat;
-            document.getElementById('longitude').value = lng;
-
-            if (!markerUser) {
-                markerUser = L.marker([lat,lng]).addTo(map);
-            } else {
-                markerUser.setLatLng([lat,lng]);
-            }
-
-            const jarak = hitungJarak(
-                lat, lng, kantor.latitude, kantor.longitude
-            );
-
-            document.getElementById('lokasi-info').innerText =
-                `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-
-            document.getElementById('jarak-info').innerText =
-                `📏 Jarak: ${Math.round(jarak)} meter`;
-
-            const info = document.getElementById('radius-info');
-            const btn  = document.getElementById('btnSubmit');
-
-            if (jarak <= kantor.radius) {
-                info.innerHTML = '🟢 Dalam radius absensi';
-                info.style.color = 'green';
-                circleRadius.setStyle({color:'green'});
-                btn.disabled = false;
-            } else {
-                info.innerHTML = '🔴 Di luar radius absensi';
-                info.style.color = 'red';
-                circleRadius.setStyle({color:'red'});
-                btn.disabled = true;
-            }
-        },
-        err => {
-            Swal.fire(
-                'GPS Error',
-                'Aktifkan GPS & izinkan lokasi',
-                'error'
-            );
-        },
-        {
-            enableHighAccuracy: true,
-            timeout: 20000,
-            maximumAge: 0
-        }
-    );
-}
+});
 </script>
 @endsection

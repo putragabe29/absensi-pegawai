@@ -56,43 +56,55 @@ class AbsensiController extends Controller
     =======================================================*/
     public function simpanAjax(Request $request)
     {
-       $request->validate([
-        'nip' => 'required',
-        'latitude' => 'required',
-        'longitude' => 'required',
-        'tipe' => 'required|in:Masuk,Pulang',
-        'foto' => 'required|image|max:4096',
-    ]);
+       try {
 
-    $pegawai = \App\Models\Pegawai::where('nip', $request->nip)->first();
-    if (!$pegawai) {
-        return response()->json(['success'=>false,'message'=>'Pegawai tidak ditemukan'],404);
+        $request->validate([
+            'nip' => 'required',
+            'latitude' => 'required',
+            'longitude' => 'required',
+            'tipe' => 'required|in:Masuk,Pulang',
+            'foto' => 'required|image|max:4096',
+        ]);
+
+        $pegawai = \App\Models\Pegawai::where('nip', $request->nip)->first();
+
+        if (!$pegawai) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pegawai tidak ditemukan'
+            ], 404);
+        }
+
+        // ❌ JANGAN PAKAI exif_read_data (BIKIN ERROR DI SERVER)
+        // Kamera sudah dipaksa dari HTML & WebView
+
+        $fotoPath = $request->file('foto')->store('foto_absen', 'public');
+
+        $absen = \App\Models\Absensi::create([
+            'pegawai_id' => $pegawai->id,
+            'tanggal'    => date('Y-m-d'),
+            'jam'        => date('H:i:s'),
+            'foto'       => $fotoPath,
+            'latitude'   => $request->latitude,
+            'longitude'  => $request->longitude,
+            'jarak'      => 0,
+            'status'     => 'Hadir',
+            'tipe'       => $request->tipe,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Absensi ' . strtoupper($request->tipe) . ' berhasil',
+            'jam'     => $absen->jam,
+            'tipe'    => $request->tipe
+        ]);
+
+    } catch (\Throwable $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Server error: ' . $e->getMessage()
+        ], 500);
     }
-
-    $foto = $request->file('foto');
-    if (!str_starts_with($foto->getMimeType(),'image/')) {
-        return response()->json(['success'=>false,'message'=>'File bukan gambar'],400);
-    }
-
-    $fotoPath = $foto->store('foto_absen','public');
-
-    $absen = \App\Models\Absensi::create([
-        'pegawai_id'=>$pegawai->id,
-        'tanggal'=>date('Y-m-d'),
-        'jam'=>date('H:i:s'),
-        'foto'=>$fotoPath,
-        'latitude'=>$request->latitude,
-        'longitude'=>$request->longitude,
-        'jarak'=>0,
-        'status'=>'Hadir',
-        'tipe'=>$request->tipe,
-    ]);
-
-    return response()->json([
-        'success'=>true,
-        'message'=>'Absensi berhasil',
-        'jam'=>$absen->jam
-    ]);
     }
 
     /* ======================================================
