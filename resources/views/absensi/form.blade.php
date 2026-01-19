@@ -174,28 +174,45 @@ navigator.geolocation.watchPosition(
 );
 
 /* ===== SUBMIT ===== */
-document.getElementById('formAbsensi').addEventListener('submit', async e => {
+document.getElementById('formAbsensi').addEventListener('submit', async function (e) {
     e.preventDefault();
 
-    if (!document.getElementById('foto').files.length) {
-        Swal.fire('Gagal','Foto wajib dari kamera','warning');
+    const foto = document.getElementById('foto');
+    if (!foto.files.length) {
+        Swal.fire('Gagal','Foto wajib diambil dari kamera','warning');
         return;
     }
 
-    Swal.fire({ title:'Mengirim...', didOpen:()=>Swal.showLoading() });
-
-    const res = await fetch('/api/absensi', {
-        method:'POST',
-        body:new FormData(e.target)
+    Swal.fire({
+        title: 'Mengirim...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
     });
-    const data = await res.json();
-    Swal.close();
 
-    if (data.success) {
-        Swal.fire('Berhasil', data.message, 'success')
-            .then(()=>location.reload());
-    } else {
-        Swal.fire('Gagal', data.message, 'warning');
+    try {
+        const res = await fetch('/api/absensi', {
+            method: 'POST',
+            body: new FormData(this)
+        });
+
+        const data = await res.json(); // ← PASTI JSON
+
+        Swal.close();
+
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Berhasil',
+                text: data.message + ' (' + data.jam + ')'
+            }).then(() => location.reload());
+        } else {
+            Swal.fire('Gagal', data.message, 'warning');
+        }
+
+    } catch (err) {
+        Swal.close();
+        Swal.fire('Error', 'Gagal menghubungi server', 'error');
+        console.error(err);
     }
 });
 </script>

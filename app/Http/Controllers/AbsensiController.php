@@ -55,52 +55,60 @@ class AbsensiController extends Controller
     =======================================================*/
     public function simpanAjax(Request $request)
     {
-       $request->validate([
-        'nip' => 'required',
-        'latitude' => 'required',
-        'longitude' => 'required',
-        'tipe' => 'required|in:Masuk,Pulang',
-        'foto' => 'required|image|max:4096',
-    ]);
+      try {
+        $request->validate([
+            'nip' => 'required',
+            'latitude' => 'required',
+            'longitude' => 'required',
+            'tipe' => 'required|in:Masuk,Pulang',
+            'foto' => 'required|image|max:5120',
+        ]);
 
-    $pegawai = \App\Models\Pegawai::where('nip', $request->nip)->first();
-    if (!$pegawai) {
+        $pegawai = \App\Models\Pegawai::where('nip', $request->nip)->first();
+        if (!$pegawai) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Pegawai tidak ditemukan'
+            ], 404);
+        }
+
+        // ❌ BLOK FOTO GALERI
+        $foto = $request->file('foto');
+        $exif = @exif_read_data($foto->getPathname());
+
+        if (!$exif || empty($exif['Make'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Foto harus diambil langsung dari kamera (bukan galeri)'
+            ], 422);
+        }
+
+        $fotoPath = $foto->store('foto_absen', 'public');
+
+        $absen = \App\Models\Absensi::create([
+            'pegawai_id' => $pegawai->id,
+            'tanggal'    => now()->toDateString(),
+            'jam'        => now()->format('H:i:s'),
+            'foto'       => $fotoPath,
+            'latitude'   => $request->latitude,
+            'longitude'  => $request->longitude,
+            'jarak'      => 0,
+            'status'     => 'Hadir',
+            'tipe'       => $request->tipe,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Absensi ' . $request->tipe . ' berhasil',
+            'jam' => $absen->jam
+        ], 200);
+
+    } catch (\Throwable $e) {
         return response()->json([
             'success' => false,
-            'message' => 'Pegawai tidak ditemukan'
-        ], 404);
+            'message' => 'Server error: ' . $e->getMessage()
+        ], 500);
     }
-
-    // 🔥 WAJIB FOTO DARI KAMERA
-    $foto = $request->file('foto');
-    $exif = @exif_read_data($foto->getPathname());
-
-    if (!$exif || empty($exif['Make']) || empty($exif['Model'])) {
-        return response()->json([
-            'success' => false,
-            'message' => '❌ Foto wajib diambil langsung dari kamera selfie'
-        ], 403);
-    }
-
-    $fotoPath = $foto->store('foto_absen', 'public');
-
-    $absen = \App\Models\Absensi::create([
-        'pegawai_id' => $pegawai->id,
-        'tanggal' => now()->toDateString(),
-        'jam' => now()->format('H:i:s'),
-        'foto' => $fotoPath,
-        'latitude' => $request->latitude,
-        'longitude' => $request->longitude,
-        'jarak' => 0,
-        'status' => 'Hadir',
-        'tipe' => $request->tipe,
-    ]);
-
-    return response()->json([
-        'success' => true,
-        'message' => 'Absensi berhasil',
-        'jam' => $absen->jam
-    ]); 
     }
 
     /* ======================================================
