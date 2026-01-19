@@ -3,10 +3,8 @@
 @section('content')
 <div class="card p-4">
 
-    <h4 class="mb-2">Form Absensi Pegawai</h4>
-    <div class="mb-3 text-muted">
-        {{ date('l, d F Y') }}
-    </div>
+    <h4 class="mb-1">Form Absensi Pegawai</h4>
+    <div class="text-muted mb-3">{{ date('l, d F Y') }}</div>
 
     {{-- STATUS HARI INI --}}
     <div class="mb-3">
@@ -25,9 +23,16 @@
         @endif
     </div>
 
+    {{-- STATUS RADIUS --}}
+    <div id="radius-box" class="p-3 rounded text-white mb-3 d-none">
+        <strong id="radius-text"></strong><br>
+        <small id="radius-detail"></small>
+    </div>
+
     <form id="formAbsensi" enctype="multipart/form-data">
-        {{-- KIRIM NIP --}}
         <input type="hidden" name="nip" value="{{ auth()->user()->nip }}">
+        <input type="hidden" name="latitude" id="latitude">
+        <input type="hidden" name="longitude" id="longitude">
 
         <div class="mb-3">
             <label>Jenis Absensi</label>
@@ -39,65 +44,91 @@
 
         <div class="mb-3">
             <label>Foto Selfie</label>
-            <input type="file" name="foto" class="form-control"
-                   accept="image/*" capture="environment" required>
+            <input type="file"
+                   name="foto"
+                   class="form-control"
+                   accept="image/*"
+                   capture="user"
+                   required>
         </div>
 
-        {{-- INFO LOKASI --}}
-        <div class="mb-3 p-2 border rounded">
-            <span id="lokasi-info">📡 Mengambil lokasi...</span>
-        </div>
-
-        <input type="hidden" name="latitude" id="latitude">
-        <input type="hidden" name="longitude" id="longitude">
-
-        <button class="btn btn-primary w-100" type="submit">
+        <button id="btnAbsen" class="btn btn-primary w-100" type="submit" disabled>
             Kirim Absensi
         </button>
     </form>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <script>
-/* === AMBIL LOKASI === */
-navigator.geolocation.getCurrentPosition(
-    pos => {
-        document.getElementById('latitude').value = pos.coords.latitude;
-        document.getElementById('longitude').value = pos.coords.longitude;
-        document.getElementById('lokasi-info').innerText =
-            '📍 Lokasi: ' + pos.coords.latitude.toFixed(5) +
-            ', ' + pos.coords.longitude.toFixed(5);
-    },
-    () => {
-        document.getElementById('lokasi-info').innerText =
-            '❌ Gagal mengambil lokasi. Aktifkan GPS.';
-    },
-    { enableHighAccuracy: true, timeout: 15000 }
-);
+// ============================
+// AMBIL LOKASI & CEK RADIUS
+// ============================
+navigator.geolocation.getCurrentPosition(async pos => {
 
-/* === SUBMIT API === */
-document.getElementById('formAbsensi').addEventListener('submit', async function(e) {
-    e.preventDefault();
+    const lat = pos.coords.latitude
+    const lng = pos.coords.longitude
 
-    const formData = new FormData(this);
+    document.getElementById('latitude').value = lat
+    document.getElementById('longitude').value = lng
+
+    const res = await fetch('/api/cek-radius', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latitude: lat, longitude: lng })
+    })
+
+    const data = await res.json()
+
+    const box = document.getElementById('radius-box')
+    const text = document.getElementById('radius-text')
+    const detail = document.getElementById('radius-detail')
+    const btn = document.getElementById('btnAbsen')
+
+    box.classList.remove('d-none')
+
+    if (data.dalam_radius) {
+        box.style.background = '#198754' // hijau
+        text.innerText = '🟢 Anda berada di dalam radius absensi'
+        detail.innerText = `Jarak ${data.jarak} m (radius ${data.radius} m)`
+        btn.disabled = false
+    } else {
+        box.style.background = '#dc3545' // merah
+        text.innerText = '🔴 Anda berada di luar radius absensi'
+        detail.innerText = `Jarak ${data.jarak} m (radius ${data.radius} m)`
+        btn.disabled = true
+    }
+
+}, () => {
+    Swal.fire('Error', 'GPS tidak aktif / izin lokasi ditolak', 'error')
+})
+
+// ============================
+// SUBMIT ABSENSI
+// ============================
+document.getElementById('formAbsensi').addEventListener('submit', async e => {
+    e.preventDefault()
+
+    const formData = new FormData(e.target)
 
     try {
         const res = await fetch('/api/absensi', {
             method: 'POST',
             body: formData
-        });
+        })
 
-        const data = await res.json();
+        const data = await res.json()
 
         if (data.success) {
             Swal.fire('Berhasil', data.message + ' (' + data.jam + ')', 'success')
-                .then(() => location.reload());
+                .then(() => location.reload())
         } else {
-            Swal.fire('Gagal', data.message, 'warning');
+            Swal.fire('Gagal', data.message, 'warning')
         }
-    } catch (e) {
-        Swal.fire('Error', 'Server tidak bisa dihubungi', 'error');
+
+    } catch {
+        Swal.fire('Error', 'Gagal menghubungi server', 'error')
     }
-});
+})
 </script>
 @endsection
