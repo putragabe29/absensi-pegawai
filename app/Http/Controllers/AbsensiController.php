@@ -74,14 +74,18 @@ class AbsensiController extends Controller
 
         // ❌ BLOK FOTO GALERI
         $foto = $request->file('foto');
-        $exif = @exif_read_data($foto->getPathname());
+        $exif = null;
 
-        if (!$exif || empty($exif['Make'])) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Foto harus diambil langsung dari kamera (bukan galeri)'
-            ], 422);
-        }
+if (function_exists('exif_read_data')) {
+    $exif = @exif_read_data($foto->getPathname());
+}
+
+if (!$exif || empty($exif['Make'])) {
+    return response()->json([
+        'success' => false,
+        'message' => 'Foto harus diambil langsung dari kamera (bukan galeri)'
+    ], 422);
+}
 
         $fotoPath = $foto->store('foto_absen', 'public');
 
