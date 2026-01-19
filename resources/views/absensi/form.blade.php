@@ -80,105 +80,120 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-/* POPUP STATUS */
-document.addEventListener('DOMContentLoaded', () => {
-    @if($absenMasuk && $absenPulang)
-        Swal.fire('Info','Anda sudah absen masuk & pulang hari ini','info');
-    @elseif($absenMasuk)
-        Swal.fire('Info','Anda sudah absen masuk hari ini','info');
-    @endif
-});
+let kantor = null;
+let map = null;
+let markerUser = null;
+let circleRadius = null;
 
-let kantor, map, markerUser, circleRadius;
-
-/* DATA KANTOR */
+/* ================= AMBIL DATA KANTOR ================= */
 fetch('/api/lokasi-kantor')
-.then(r => r.json())
-.then(d => { kantor = d; initMap(); });
+  .then(res => res.json())
+  .then(data => {
+    kantor = data;
+    initMap();
+    startGPS();
+  })
+  .catch(() => {
+    Swal.fire('Error','Gagal mengambil data kantor','error');
+  });
 
+/* ================= INIT MAP ================= */
 function initMap() {
-    map = L.map('map').setView([kantor.latitude, kantor.longitude], 17);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    map = L.map('map').setView(
+        [kantor.latitude, kantor.longitude], 17
+    );
 
-    L.marker([kantor.latitude, kantor.longitude]).addTo(map).bindPopup('🏢 Kantor');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19
+    }).addTo(map);
+
+    L.marker([kantor.latitude, kantor.longitude])
+      .addTo(map)
+      .bindPopup('🏢 Lokasi Kantor');
 
     circleRadius = L.circle(
         [kantor.latitude, kantor.longitude],
-        { radius: kantor.radius, color:'green', fillOpacity:0.15 }
+        {
+            radius: kantor.radius,
+            color: 'green',
+            fillOpacity: 0.2
+        }
     ).addTo(map);
 }
 
-/* HITUNG JARAK */
+/* ================= HITUNG JARAK ================= */
 function hitungJarak(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = (lat2-lat1)*Math.PI/180;
     const dLon = (lon2-lon1)*Math.PI/180;
-    const a = Math.sin(dLat/2)**2 +
-        Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+    const a =
+        Math.sin(dLat/2)**2 +
+        Math.cos(lat1*Math.PI/180) *
+        Math.cos(lat2*Math.PI/180) *
         Math.sin(dLon/2)**2;
+
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-/* GPS REALTIME */
-navigator.geolocation.watchPosition(
-pos => {
-    const lat = pos.coords.latitude;
-    const lng = pos.coords.longitude;
-
-    latitude.value = lat;
-    longitude.value = lng;
-
-    if (!markerUser) markerUser = L.marker([lat,lng]).addTo(map);
-    else markerUser.setLatLng([lat,lng]);
-
-    const jarak = hitungJarak(lat,lng,kantor.latitude,kantor.longitude);
-
-    lokasi-info.innerText = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-    jarak-info.innerText = `📏 Jarak: ${Math.round(jarak)} meter`;
-
-    if (jarak <= kantor.radius) {
-        radius-info.innerHTML = '🟢 Dalam radius absensi';
-        circleRadius.setStyle({color:'green'});
-        btnSubmit.disabled = false;
-    } else {
-        radius-info.innerHTML = '🔴 Di luar radius absensi';
-        circleRadius.setStyle({color:'red'});
-        btnSubmit.disabled = true;
-    }
-},
-() => Swal.fire('Error','Aktifkan GPS','error'),
-{ enableHighAccuracy:true }
-);
-
-/* SUBMIT */
-formAbsensi.addEventListener('submit', async e => {
-    e.preventDefault();
-
-    if (!foto.files.length) {
-        Swal.fire('Gagal','Foto wajib dari kamera','warning');
+/* ================= GPS ================= */
+function startGPS() {
+    if (!navigator.geolocation) {
+        Swal.fire('Error','Browser tidak mendukung GPS','error');
         return;
     }
 
-    Swal.fire({title:'Mengirim...',allowOutsideClick:false,didOpen:()=>Swal.showLoading()});
+    navigator.geolocation.watchPosition(
+        pos => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
 
-    try {
-        const res = await fetch('/api/absensi', {
-            method:'POST',
-            body:new FormData(formAbsensi)
-        });
-        const data = await res.json();
-        Swal.close();
+            document.getElementById('latitude').value = lat;
+            document.getElementById('longitude').value = lng;
 
-        if (data.success) {
-            Swal.fire('Berhasil', data.message + ' (' + data.jam + ')','success')
-                .then(()=>location.reload());
-        } else {
-            Swal.fire('Gagal', data.message,'warning');
+            if (!markerUser) {
+                markerUser = L.marker([lat,lng]).addTo(map);
+            } else {
+                markerUser.setLatLng([lat,lng]);
+            }
+
+            const jarak = hitungJarak(
+                lat, lng, kantor.latitude, kantor.longitude
+            );
+
+            document.getElementById('lokasi-info').innerText =
+                `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+            document.getElementById('jarak-info').innerText =
+                `📏 Jarak: ${Math.round(jarak)} meter`;
+
+            const info = document.getElementById('radius-info');
+            const btn  = document.getElementById('btnSubmit');
+
+            if (jarak <= kantor.radius) {
+                info.innerHTML = '🟢 Dalam radius absensi';
+                info.style.color = 'green';
+                circleRadius.setStyle({color:'green'});
+                btn.disabled = false;
+            } else {
+                info.innerHTML = '🔴 Di luar radius absensi';
+                info.style.color = 'red';
+                circleRadius.setStyle({color:'red'});
+                btn.disabled = true;
+            }
+        },
+        err => {
+            Swal.fire(
+                'GPS Error',
+                'Aktifkan GPS & izinkan lokasi',
+                'error'
+            );
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 20000,
+            maximumAge: 0
         }
-    } catch {
-        Swal.close();
-        Swal.fire('Error','Gagal menghubungi server','error');
-    }
-});
+    );
+}
 </script>
 @endsection
