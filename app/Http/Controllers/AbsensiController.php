@@ -55,65 +55,54 @@ class AbsensiController extends Controller
     =======================================================*/
     public function simpanAjax(Request $request)
     {
-      try {
-        $request->validate([
-            'nip' => 'required',
-            'latitude' => 'required',
-            'longitude' => 'required',
-            'tipe' => 'required|in:Masuk,Pulang',
-            'foto' => 'required|image|max:5120',
-        ]);
+     $request->validate([
+        'nip' => 'required',
+        'latitude' => 'required',
+        'longitude' => 'required',
+        'tipe' => 'required|in:Masuk,Pulang',
+        'foto' => 'required|image|max:4096',
+    ]);
 
-        $pegawai = \App\Models\Pegawai::where('nip', $request->nip)->first();
-        if (!$pegawai) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Pegawai tidak ditemukan'
-            ], 404);
-        }
-
-        // ❌ BLOK FOTO GALERI
-        $foto = $request->file('foto');
-        $exif = null;
-
-if (function_exists('exif_read_data')) {
-    $exif = @exif_read_data($foto->getPathname());
-}
-
-if (!$exif || empty($exif['Make'])) {
-    return response()->json([
-        'success' => false,
-        'message' => 'Foto harus diambil langsung dari kamera (bukan galeri)'
-    ], 422);
-}
-
-        $fotoPath = $foto->store('foto_absen', 'public');
-
-        $absen = \App\Models\Absensi::create([
-            'pegawai_id' => $pegawai->id,
-            'tanggal'    => now()->toDateString(),
-            'jam'        => now()->format('H:i:s'),
-            'foto'       => $fotoPath,
-            'latitude'   => $request->latitude,
-            'longitude'  => $request->longitude,
-            'jarak'      => 0,
-            'status'     => 'Hadir',
-            'tipe'       => $request->tipe,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Absensi ' . $request->tipe . ' berhasil',
-            'jam' => $absen->jam
-        ], 200);
-
-    } catch (\Throwable $e) {
+    // 🔎 Cari pegawai berdasarkan NIP
+    $pegawai = \App\Models\Pegawai::where('nip', $request->nip)->first();
+    if (!$pegawai) {
         return response()->json([
             'success' => false,
-            'message' => 'Server error: ' . $e->getMessage()
-        ], 500);
+            'message' => 'Pegawai tidak ditemukan'
+        ], 404);
     }
+
+    // 📸 VALIDASI FILE FOTO (AMAN TANPA EXIF)
+    $foto = $request->file('foto');
+    $mime = $foto->getMimeType();
+
+    if (!in_array($mime, ['image/jpeg', 'image/jpg', 'image/png'])) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Foto tidak valid'
+        ], 400);
     }
+
+    // 📍 SIMPAN FOTO
+    $fotoPath = $foto->store('foto_absen', 'public');
+
+    $absen = \App\Models\Absensi::create([
+        'pegawai_id' => $pegawai->id,
+        'tanggal'    => date('Y-m-d'),
+        'jam'        => date('H:i:s'),
+        'foto'       => $fotoPath,
+        'latitude'   => $request->latitude,
+        'longitude'  => $request->longitude,
+        'jarak'      => 0,
+        'status'     => 'Hadir',
+        'tipe'       => $request->tipe,
+    ]);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Absensi berhasil',
+        'jam' => $absen->jam
+    ]);   }
 
     /* ======================================================
        4. HITUNG JARAK (METER)

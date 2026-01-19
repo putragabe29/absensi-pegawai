@@ -47,14 +47,11 @@
 
         <div class="mb-3">
             <label class="fw-semibold">Foto Selfie (kamera)</label>
-            <input type="file"
-                   id="foto"
-                   name="foto"
-                   class="form-control"
-                   accept="image/*"
-                   capture="user"
-                   @if($absenMasuk && $absenPulang) disabled @endif
-                   required>
+          <input type="file"
+       name="foto"
+       accept="image/*"
+       capture="environment"
+       required>
             <small class="text-danger">❗ Harus dari kamera, tidak boleh galeri</small>
         </div>
 
