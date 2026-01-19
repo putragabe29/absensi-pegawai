@@ -56,18 +56,16 @@ class AbsensiController extends Controller
     =======================================================*/
     public function simpanAjax(Request $request)
     {
-       try {
-
+      try {
         $request->validate([
-            'nip' => 'required',
-            'latitude' => 'required',
+            'nip'       => 'required',
+            'latitude'  => 'required',
             'longitude' => 'required',
-            'tipe' => 'required|in:Masuk,Pulang',
-            'foto' => 'required|image|max:4096',
+            'tipe'      => 'required|in:Masuk,Pulang',
+            'foto'      => 'required|image|max:4096',
         ]);
 
         $pegawai = \App\Models\Pegawai::where('nip', $request->nip)->first();
-
         if (!$pegawai) {
             return response()->json([
                 'success' => false,
@@ -75,14 +73,43 @@ class AbsensiController extends Controller
             ], 404);
         }
 
-        // ❌ JANGAN PAKAI exif_read_data (BIKIN ERROR DI SERVER)
-        // Kamera sudah dipaksa dari HTML & WebView
+        // CEK ABSENSI HARI INI
+        $today = date('Y-m-d');
 
+        if ($request->tipe === 'Masuk') {
+            $cek = \App\Models\Absensi::where('pegawai_id', $pegawai->id)
+                ->where('tanggal', $today)
+                ->where('tipe', 'Masuk')
+                ->exists();
+
+            if ($cek) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anda sudah absen MASUK hari ini'
+                ]);
+            }
+        }
+
+        if ($request->tipe === 'Pulang') {
+            $cek = \App\Models\Absensi::where('pegawai_id', $pegawai->id)
+                ->where('tanggal', $today)
+                ->where('tipe', 'Pulang')
+                ->exists();
+
+            if ($cek) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Anda sudah absen PULANG hari ini'
+                ]);
+            }
+        }
+
+        // SIMPAN FOTO (TANPA EXIF — BIAR TIDAK ERROR)
         $fotoPath = $request->file('foto')->store('foto_absen', 'public');
 
         $absen = \App\Models\Absensi::create([
             'pegawai_id' => $pegawai->id,
-            'tanggal'    => date('Y-m-d'),
+            'tanggal'    => $today,
             'jam'        => date('H:i:s'),
             'foto'       => $fotoPath,
             'latitude'   => $request->latitude,
@@ -102,7 +129,7 @@ class AbsensiController extends Controller
     } catch (\Throwable $e) {
         return response()->json([
             'success' => false,
-            'message' => 'Server error: ' . $e->getMessage()
+            'message' => 'Server error'
         ], 500);
     }
     }
