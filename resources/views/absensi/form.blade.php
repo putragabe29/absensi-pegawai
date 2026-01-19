@@ -28,7 +28,7 @@
     <form id="formAbsensi" enctype="multipart/form-data">
         @csrf
 
-        {{-- KIRIM NIP --}}
+        {{-- NIP --}}
         <input type="hidden" name="nip" value="{{ auth()->user()->nip }}">
 
         <div class="mb-3">
@@ -48,12 +48,14 @@
                    capture="user"
                    required>
             <small class="text-muted">
-                Foto harus diambil langsung dari kamera depan (selfie).
+                Foto harus diambil langsung dari kamera depan.
             </small>
         </div>
 
+        {{-- INFO LOKASI --}}
         <div class="mb-3 p-2 border rounded">
-            <span id="lokasi-info">📡 Mengambil lokasi...</span>
+            <div id="lokasi-info">📡 Mengambil lokasi...</div>
+            <div id="radius-info" class="fw-semibold mt-1">⏳ Mengecek radius...</div>
         </div>
 
         <input type="hidden" name="latitude" id="latitude">
@@ -67,14 +69,62 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-// ===== GPS =====
+let kantor = null;
+
+// ===============================
+// HITUNG JARAK (HAVERSINE)
+// ===============================
+function hitungJarak(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2-lat1) * Math.PI/180;
+    const dLon = (lon2-lon1) * Math.PI/180;
+
+    const a =
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI/180) *
+        Math.cos(lat2 * Math.PI/180) *
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+// ===============================
+// AMBIL LOKASI KANTOR
+// ===============================
+fetch('/api/lokasi-kantor')
+    .then(res => res.json())
+    .then(data => kantor = data);
+
+// ===============================
+// AMBIL LOKASI USER
+// ===============================
 navigator.geolocation.getCurrentPosition(
     pos => {
-        latitude.value = pos.coords.latitude;
-        longitude.value = pos.coords.longitude;
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+
+        latitude.value = lat;
+        longitude.value = lng;
+
         document.getElementById('lokasi-info').innerText =
-            '📍 Lokasi: ' + pos.coords.latitude.toFixed(5) + ', ' +
-            pos.coords.longitude.toFixed(5);
+            `📍 Lokasi Anda: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+        if (kantor) {
+            const jarak = hitungJarak(
+                lat, lng,
+                kantor.latitude, kantor.longitude
+            );
+
+            if (jarak <= kantor.radius) {
+                radius-info.innerHTML =
+                    `🟢 Anda DI DALAM radius absensi (${Math.round(jarak)} m)`;
+                radius-info.style.color = 'green';
+            } else {
+                radius-info.innerHTML =
+                    `🔴 Anda DI LUAR radius absensi (${Math.round(jarak)} m)`;
+                radius-info.style.color = 'red';
+            }
+        }
     },
     () => {
         document.getElementById('lokasi-info').innerText =
@@ -83,38 +133,62 @@ navigator.geolocation.getCurrentPosition(
     { enableHighAccuracy: true, timeout: 15000 }
 );
 
-// ===== ANTI GALERI =====
+// ===============================
+// ANTI GALERI
+// ===============================
 document.querySelector('input[name="foto"]').addEventListener('change', function () {
     const file = this.files[0];
-    if (!file) return;
-
-    if (!file.lastModified || file.lastModified < 1000000000000) {
+    if (!file || !file.lastModified || file.lastModified < 1000000000000) {
         Swal.fire('Ditolak', 'Foto wajib dari kamera selfie', 'error');
         this.value = '';
     }
 });
 
-// ===== SUBMIT =====
+// ===============================
+// SUBMIT ABSENSI
+// ===============================
 document.getElementById('formAbsensi').addEventListener('submit', async function(e) {
     e.preventDefault();
+
     const formData = new FormData(this);
 
+    Swal.fire({
+        title: 'Mengirim...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+
     try {
-        const res = await fetch('/api/absensi', {
+        const response = await fetch('/api/absensi', {
             method: 'POST',
-            body: formData
+            body: formData,
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
         });
 
-        const data = await res.json();
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Response bukan JSON');
+        }
 
-        if (data.success) {
+        const data = await response.json();
+        Swal.close();
+
+        if (response.ok && data.success) {
             Swal.fire('Berhasil', data.message + ' (' + data.jam + ')', 'success')
                 .then(() => location.reload());
         } else {
-            Swal.fire('Gagal', data.message, 'warning');
+            Swal.fire('Gagal', data.message || 'Absensi gagal', 'warning');
         }
-    } catch {
-        Swal.fire('Error', 'Server tidak bisa dihubungi', 'error');
+
+    } catch (err) {
+        Swal.close();
+        Swal.fire(
+            'Error',
+            'Gagal menghubungi server. Cek koneksi atau login ulang.',
+            'error'
+        );
+        console.error(err);
     }
 });
 </script>
