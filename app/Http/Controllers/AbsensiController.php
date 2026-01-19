@@ -56,103 +56,43 @@ class AbsensiController extends Controller
     =======================================================*/
     public function simpanAjax(Request $request)
     {
-        /* ================= VALIDASI DASAR ================= */
-        $request->validate([
-            'nip'       => 'required',
-            'latitude'  => 'required|numeric',
-            'longitude' => 'required|numeric',
-            'tipe'      => 'required|in:Masuk,Pulang',
-            'foto'      => 'required|image|mimes:jpg,jpeg,png|max:5120',
-        ]);
+       $request->validate([
+        'nip' => 'required',
+        'latitude' => 'required',
+        'longitude' => 'required',
+        'tipe' => 'required|in:Masuk,Pulang',
+        'foto' => 'required|image|max:4096',
+    ]);
 
-        /* ================= AMBIL PEGAWAI ================= */
-        $pegawai = Pegawai::where('nip', $request->nip)->first();
+    $pegawai = \App\Models\Pegawai::where('nip', $request->nip)->first();
+    if (!$pegawai) {
+        return response()->json(['success'=>false,'message'=>'Pegawai tidak ditemukan'],404);
+    }
 
-        if (!$pegawai) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Pegawai tidak ditemukan'
-            ], 404);
-        }
+    $foto = $request->file('foto');
+    if (!str_starts_with($foto->getMimeType(),'image/')) {
+        return response()->json(['success'=>false,'message'=>'File bukan gambar'],400);
+    }
 
-        /* ================= CEK ABSENSI HARI INI ================= */
-        $today = Carbon::today();
+    $fotoPath = $foto->store('foto_absen','public');
 
-        if ($request->tipe === 'Masuk') {
-            $sudahMasuk = Absensi::where('pegawai_id', $pegawai->id)
-                ->whereDate('tanggal', $today)
-                ->where('tipe', 'Masuk')
-                ->exists();
+    $absen = \App\Models\Absensi::create([
+        'pegawai_id'=>$pegawai->id,
+        'tanggal'=>date('Y-m-d'),
+        'jam'=>date('H:i:s'),
+        'foto'=>$fotoPath,
+        'latitude'=>$request->latitude,
+        'longitude'=>$request->longitude,
+        'jarak'=>0,
+        'status'=>'Hadir',
+        'tipe'=>$request->tipe,
+    ]);
 
-            if ($sudahMasuk) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Anda sudah absen MASUK hari ini'
-                ], 409);
-            }
-        }
-
-        if ($request->tipe === 'Pulang') {
-            $sudahPulang = Absensi::where('pegawai_id', $pegawai->id)
-                ->whereDate('tanggal', $today)
-                ->where('tipe', 'Pulang')
-                ->exists();
-
-            if ($sudahPulang) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Anda sudah absen PULANG hari ini'
-                ], 409);
-            }
-        }
-
-        /* ================= VALIDASI LOKASI ================= */
-        $kantor = PengaturanKantor::first();
-
-        if (!$kantor) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Lokasi kantor belum diatur'
-            ], 500);
-        }
-
-        $jarak = $this->hitungJarak(
-            $request->latitude,
-            $request->longitude,
-            $kantor->latitude,
-            $kantor->longitude
-        );
-
-        if ($jarak > $kantor->radius) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Anda berada di luar radius absensi',
-                'jarak'   => round($jarak)
-            ], 403);
-        }
-
-        /* ================= SIMPAN FOTO ================= */
-        $fotoPath = $request->file('foto')->store('foto_absen', 'public');
-
-        /* ================= SIMPAN ABSENSI ================= */
-        $absen = Absensi::create([
-            'pegawai_id' => $pegawai->id,
-            'tanggal'    => $today->format('Y-m-d'),
-            'jam'        => Carbon::now()->format('H:i:s'),
-            'tipe'       => $request->tipe,
-            'status'     => 'Hadir',
-            'latitude'   => $request->latitude,
-            'longitude'  => $request->longitude,
-            'jarak'      => round($jarak),
-            'foto'       => $fotoPath,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Absensi ' . strtoupper($request->tipe) . ' berhasil',
-            'jam'     => $absen->jam,
-            'jarak'   => round($jarak)
-        ]);
+    return response()->json([
+        'success'=>true,
+        'message'=>'Absensi berhasil',
+        'jam'=>$absen->jam
+    ]);
     }
 
     /* ======================================================

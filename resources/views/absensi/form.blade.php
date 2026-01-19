@@ -1,41 +1,40 @@
 @extends('layouts.app')
 
 @section('content')
-<link rel="stylesheet"
-      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
 <div class="card p-4">
-
     <h4 class="mb-1">Form Absensi Pegawai</h4>
     <div class="text-muted mb-3">{{ date('l, d F Y') }}</div>
 
-    {{-- ================= STATUS HARI INI ================= --}}
+    {{-- STATUS HARI INI --}}
     <div class="mb-3">
         @if($absenMasuk && $absenPulang)
             <div class="alert alert-success">
-                ✅ Anda sudah absen <b>MASUK</b> ({{ $absenMasuk->jam }})
+                ✅ Sudah absen <b>MASUK</b> ({{ $absenMasuk->jam }})
                 dan <b>PULANG</b> ({{ $absenPulang->jam }})
             </div>
         @elseif($absenMasuk)
             <div class="alert alert-info">
-                ✅ Anda sudah absen <b>MASUK</b> pukul {{ $absenMasuk->jam }} <br>
-                ⏳ Silakan lakukan absensi <b>PULANG</b>
+                ✅ Sudah absen <b>MASUK</b> ({{ $absenMasuk->jam }})<br>
+                ⏳ Silakan absen <b>PULANG</b>
             </div>
         @else
             <div class="alert alert-warning">
-                ❌ Anda belum melakukan absensi hari ini
+                ❌ Belum melakukan absensi hari ini
             </div>
         @endif
     </div>
 
     <form id="formAbsensi" enctype="multipart/form-data">
+        @csrf
         <input type="hidden" name="nip" value="{{ auth()->user()->nip }}">
         <input type="hidden" name="latitude" id="latitude">
         <input type="hidden" name="longitude" id="longitude">
 
         <div class="mb-3">
             <label class="fw-semibold">Jenis Absensi</label>
-            <select name="tipe" id="tipe" class="form-select"
+            <select name="tipe" class="form-select"
                 @if($absenMasuk && $absenPulang) disabled @endif>
                 @if(!$absenMasuk)
                     <option value="Masuk">Masuk</option>
@@ -47,20 +46,22 @@
 
         <div class="mb-3">
             <label class="fw-semibold">Foto Selfie (kamera)</label>
-          <input type="file"
-       name="foto"
-       accept="image/*"
-       capture="environment"
-       required>
-            <small class="text-danger">❗ Harus dari kamera, tidak boleh galeri</small>
+            <input type="file"
+                   id="foto"
+                   name="foto"
+                   class="form-control"
+                   accept="image/*"
+                   capture="environment"
+                   required>
+            <small class="text-danger">❗ Harus dari kamera (galeri ditolak)</small>
         </div>
 
-        {{-- MAP MINI --}}
+        {{-- MAP --}}
         <div class="mb-3">
             <div id="map" style="height:240px;border-radius:10px"></div>
         </div>
 
-        {{-- INFO LOKASI --}}
+        {{-- INFO --}}
         <div class="mb-3 p-3 border rounded">
             <div id="lokasi-info">📡 Mengambil lokasi...</div>
             <div id="radius-info" class="fw-semibold mt-1"></div>
@@ -79,10 +80,10 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-/* ================= POPUP STATUS SAAT LOAD ================= */
+/* POPUP STATUS */
 document.addEventListener('DOMContentLoaded', () => {
     @if($absenMasuk && $absenPulang)
-        Swal.fire('Info','Anda sudah absen masuk dan pulang hari ini','info');
+        Swal.fire('Info','Anda sudah absen masuk & pulang hari ini','info');
     @elseif($absenMasuk)
         Swal.fire('Info','Anda sudah absen masuk hari ini','info');
     @endif
@@ -90,25 +91,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 let kantor, map, markerUser, circleRadius;
 
-/* ===== AMBIL DATA KANTOR ===== */
+/* DATA KANTOR */
 fetch('/api/lokasi-kantor')
-  .then(r => r.json())
-  .then(d => {
-    kantor = d;
-    initMap();
-  });
+.then(r => r.json())
+.then(d => { kantor = d; initMap(); });
 
 function initMap() {
-    map = L.map('map').setView(
-        [kantor.latitude, kantor.longitude], 17
-    );
+    map = L.map('map').setView([kantor.latitude, kantor.longitude], 17);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
-      .addTo(map);
-
-    L.marker([kantor.latitude, kantor.longitude])
-      .addTo(map)
-      .bindPopup('🏢 Kantor');
+    L.marker([kantor.latitude, kantor.longitude]).addTo(map).bindPopup('🏢 Kantor');
 
     circleRadius = L.circle(
         [kantor.latitude, kantor.longitude],
@@ -116,100 +108,76 @@ function initMap() {
     ).addTo(map);
 }
 
-/* ===== HITUNG JARAK ===== */
+/* HITUNG JARAK */
 function hitungJarak(lat1, lon1, lat2, lon2) {
     const R = 6371000;
     const dLat = (lat2-lat1)*Math.PI/180;
     const dLon = (lon2-lon1)*Math.PI/180;
-    const a =
-      Math.sin(dLat/2)**2 +
-      Math.cos(lat1*Math.PI/180) *
-      Math.cos(lat2*Math.PI/180) *
-      Math.sin(dLon/2)**2;
+    const a = Math.sin(dLat/2)**2 +
+        Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+        Math.sin(dLon/2)**2;
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-/* ===== GPS REALTIME ===== */
+/* GPS REALTIME */
 navigator.geolocation.watchPosition(
-    pos => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
+pos => {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
 
-        document.getElementById('latitude').value = lat;
-        document.getElementById('longitude').value = lng;
+    latitude.value = lat;
+    longitude.value = lng;
 
-        if (!markerUser) {
-            markerUser = L.marker([lat,lng]).addTo(map);
-        } else {
-            markerUser.setLatLng([lat,lng]);
-        }
+    if (!markerUser) markerUser = L.marker([lat,lng]).addTo(map);
+    else markerUser.setLatLng([lat,lng]);
 
-        const jarak = hitungJarak(
-            lat, lng, kantor.latitude, kantor.longitude
-        );
+    const jarak = hitungJarak(lat,lng,kantor.latitude,kantor.longitude);
 
-        document.getElementById('lokasi-info').innerText =
-            `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-        document.getElementById('jarak-info').innerText =
-            `📏 Jarak: ${Math.round(jarak)} meter`;
+    lokasi-info.innerText = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    jarak-info.innerText = `📏 Jarak: ${Math.round(jarak)} meter`;
 
-        const info = document.getElementById('radius-info');
-        const btn  = document.getElementById('btnSubmit');
-
-        if (jarak <= kantor.radius) {
-            info.innerHTML = '🟢 Dalam radius absensi';
-            circleRadius.setStyle({color:'green'});
-            btn.disabled = false;
-        } else {
-            info.innerHTML = '🔴 Di luar radius absensi';
-            circleRadius.setStyle({color:'red'});
-            btn.disabled = true;
-        }
-    },
-    () => Swal.fire('Error','Aktifkan GPS','error'),
-    { enableHighAccuracy:true }
+    if (jarak <= kantor.radius) {
+        radius-info.innerHTML = '🟢 Dalam radius absensi';
+        circleRadius.setStyle({color:'green'});
+        btnSubmit.disabled = false;
+    } else {
+        radius-info.innerHTML = '🔴 Di luar radius absensi';
+        circleRadius.setStyle({color:'red'});
+        btnSubmit.disabled = true;
+    }
+},
+() => Swal.fire('Error','Aktifkan GPS','error'),
+{ enableHighAccuracy:true }
 );
 
-/* ===== SUBMIT ===== */
-document.getElementById('formAbsensi').addEventListener('submit', async function (e) {
+/* SUBMIT */
+formAbsensi.addEventListener('submit', async e => {
     e.preventDefault();
 
-    const foto = document.getElementById('foto');
     if (!foto.files.length) {
-        Swal.fire('Gagal','Foto wajib diambil dari kamera','warning');
+        Swal.fire('Gagal','Foto wajib dari kamera','warning');
         return;
     }
 
-    Swal.fire({
-        title: 'Mengirim...',
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading()
-    });
+    Swal.fire({title:'Mengirim...',allowOutsideClick:false,didOpen:()=>Swal.showLoading()});
 
     try {
         const res = await fetch('/api/absensi', {
-            method: 'POST',
-            body: new FormData(this)
+            method:'POST',
+            body:new FormData(formAbsensi)
         });
-
-        const data = await res.json(); // ← PASTI JSON
-
+        const data = await res.json();
         Swal.close();
 
         if (data.success) {
-            Swal.fire({
-                icon: 'success',
-                title: 'Berhasil',
-                text: data.message + ' (' + data.jam + ')'
-            }).then(() => location.reload());
+            Swal.fire('Berhasil', data.message + ' (' + data.jam + ')','success')
+                .then(()=>location.reload());
         } else {
-            Swal.fire('Gagal', data.message, 'warning');
+            Swal.fire('Gagal', data.message,'warning');
         }
-
-    } catch (err) {
+    } catch {
         Swal.close();
-        Swal.fire('Error', 'Gagal menghubungi server', 'error');
-        console.error(err);
+        Swal.fire('Error','Gagal menghubungi server','error');
     }
 });
 </script>
