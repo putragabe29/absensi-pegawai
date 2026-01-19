@@ -8,144 +8,173 @@
         {{ date('l, d F Y') }}
     </div>
 
-    {{-- STATUS HARI INI --}}
-    <div class="mb-3">
-        @if($absenMasuk && $absenPulang)
-            <div class="alert alert-success">
-                ✅ Sudah absen MASUK ({{ $absenMasuk->jam }}) dan PULANG ({{ $absenPulang->jam }})
-            </div>
-        @elseif($absenMasuk)
-            <div class="alert alert-warning">
-                ✅ Sudah absen MASUK ({{ $absenMasuk->jam }}), belum absen PULANG
-            </div>
-        @else
-            <div class="alert alert-danger">
-                ❌ Belum melakukan absensi hari ini
-            </div>
-        @endif
-    </div>
+    {{-- ================= STATUS HARI INI ================= --}}
+    @if($absenMasuk && $absenPulang)
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+        <script>
+            Swal.fire({
+                icon: 'success',
+                title: 'Absensi Lengkap',
+                text: 'Anda sudah absen MASUK dan PULANG hari ini.',
+                confirmButtonColor: '#F47C20'
+            });
+        </script>
+    @elseif($absenMasuk)
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+        <script>
+            Swal.fire({
+                icon: 'info',
+                title: 'Sudah Absen Masuk',
+                text: 'Anda sudah melakukan absensi MASUK hari ini.',
+                confirmButtonColor: '#F47C20'
+            });
+        </script>
+    @endif
 
+    {{-- ================= FORM ================= --}}
     <form id="formAbsensi" enctype="multipart/form-data">
-        @csrf
 
-        {{-- NIP --}}
+        {{-- kirim nip untuk API --}}
         <input type="hidden" name="nip" value="{{ auth()->user()->nip }}">
 
+        {{-- JENIS ABSENSI --}}
         <div class="mb-3">
-            <label>Jenis Absensi</label>
-            <select name="tipe" class="form-select" required>
-                <option value="Masuk">Masuk</option>
-                <option value="Pulang">Pulang</option>
+            <label class="form-label fw-semibold">Jenis Absensi</label>
+            <select name="tipe" class="form-select"
+                {{ $absenMasuk && $absenPulang ? 'disabled' : '' }}
+                required>
+                <option value="Masuk" {{ $absenMasuk ? 'disabled' : '' }}>
+                    Masuk
+                </option>
+                <option value="Pulang" {{ !$absenMasuk || $absenPulang ? 'disabled' : '' }}>
+                    Pulang
+                </option>
             </select>
         </div>
 
+        {{-- FOTO SELFIE --}}
         <div class="mb-3">
-            <label>Foto Selfie (WAJIB Kamera)</label>
+            <label class="form-label fw-semibold">Foto Selfie (Kamera)</label>
             <input type="file"
                    name="foto"
+                   id="foto"
                    class="form-control"
                    accept="image/*"
                    capture="user"
+                   {{ $absenMasuk && $absenPulang ? 'disabled' : '' }}
                    required>
             <small class="text-muted">
-                Foto harus diambil langsung dari kamera depan.
+                ❗ Wajib foto langsung dari kamera (bukan galeri)
             </small>
         </div>
 
         {{-- INFO LOKASI --}}
         <div class="mb-3 p-2 border rounded">
-            <div id="lokasi-info">📡 Mengambil lokasi...</div>
-            <div id="radius-info" class="fw-semibold mt-1">⏳ Mengecek radius...</div>
+            <span id="lokasi-info">📡 Mengambil lokasi...</span>
         </div>
 
         <input type="hidden" name="latitude" id="latitude">
         <input type="hidden" name="longitude" id="longitude">
 
-        <button class="btn btn-primary w-100" type="submit">
-            Kirim Absensi
+        {{-- TOMBOL --}}
+        <button type="submit"
+                id="btnSubmit"
+                class="btn btn-primary w-100"
+                {{ $absenMasuk && $absenPulang ? 'disabled' : '' }}>
+            💼 Kirim Absensi
         </button>
+
+        @if($absenMasuk && $absenPulang)
+            <div class="text-center text-success mt-2 fw-semibold">
+                ✅ Absensi hari ini sudah lengkap
+            </div>
+        @endif
     </form>
 </div>
 
+{{-- ================= SCRIPT ================= --}}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-let kantor = null;
-
-// ===============================
-// HITUNG JARAK (HAVERSINE)
-// ===============================
-function hitungJarak(lat1, lon1, lat2, lon2) {
-    const R = 6371000;
-    const dLat = (lat2-lat1) * Math.PI/180;
-    const dLon = (lon2-lon1) * Math.PI/180;
-
-    const a =
-        Math.sin(dLat/2) ** 2 +
-        Math.cos(lat1 * Math.PI/180) *
-        Math.cos(lat2 * Math.PI/180) *
-        Math.sin(dLon/2) ** 2;
-
-    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
-}
-
-// ===============================
-// AMBIL DATA KANTOR DULU
-// ===============================
-async function ambilDataKantor() {
-    try {
-        const res = await fetch('/api/lokasi-kantor', {
-            headers: { 'Accept': 'application/json' }
-        });
-        kantor = await res.json();
-        ambilLokasiUser(); // ⬅️ LANJUT KE GPS
-    } catch {
-        document.getElementById('radius-info').innerHTML =
-            '❌ Gagal memuat data kantor';
-    }
-}
-
-// ===============================
-// AMBIL LOKASI USER
-// ===============================
-function ambilLokasiUser() {
+/* ================= AMBIL LOKASI ================= */
+if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
         pos => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-
-            latitude.value = lat;
-            longitude.value = lng;
-
-            document.getElementById('lokasi-info').innerHTML =
-                `📍 Lokasi Anda: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-
-            const jarak = hitungJarak(
-                lat, lng,
-                kantor.latitude, kantor.longitude
-            );
-
-            if (jarak <= kantor.radius) {
-                document.getElementById('radius-info').innerHTML =
-                    `🟢 Anda DI DALAM radius absensi (${Math.round(jarak)} m)`;
-                document.getElementById('radius-info').style.color = 'green';
-            } else {
-                document.getElementById('radius-info').innerHTML =
-                    `🔴 Anda DI LUAR radius absensi (${Math.round(jarak)} m)`;
-                document.getElementById('radius-info').style.color = 'red';
-            }
+            document.getElementById('latitude').value = pos.coords.latitude;
+            document.getElementById('longitude').value = pos.coords.longitude;
+            document.getElementById('lokasi-info').innerText =
+                '📍 Lokasi: ' +
+                pos.coords.latitude.toFixed(5) + ', ' +
+                pos.coords.longitude.toFixed(5);
         },
         () => {
-            document.getElementById('lokasi-info').innerHTML =
-                '❌ Gagal mengambil lokasi. Aktifkan GPS & izin lokasi.';
-            document.getElementById('radius-info').innerHTML = '';
+            document.getElementById('lokasi-info').innerText =
+                '❌ Gagal mengambil lokasi. Aktifkan GPS.';
         },
         { enableHighAccuracy: true, timeout: 15000 }
     );
+} else {
+    document.getElementById('lokasi-info').innerText =
+        '❌ Browser tidak mendukung GPS';
 }
 
-// ===============================
-// JALANKAN
-// ===============================
-ambilDataKantor();
+/* ================= SUBMIT ABSENSI ================= */
+document.getElementById('formAbsensi').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const foto = document.getElementById('foto').files[0];
+    const lat  = document.getElementById('latitude').value;
+    const lng  = document.getElementById('longitude').value;
+
+    if (!lat || !lng) {
+        Swal.fire('Gagal', 'Lokasi belum terdeteksi', 'warning');
+        return;
+    }
+
+    if (!foto) {
+        Swal.fire('Gagal', 'Foto selfie wajib diambil dari kamera', 'warning');
+        return;
+    }
+
+    // ❌ CEGAH GALERI
+    if (!foto.type.startsWith('image/')) {
+        Swal.fire(
+            'Tidak Valid',
+            'Foto harus diambil langsung dari kamera (bukan galeri)',
+            'error'
+        );
+        return;
+    }
+
+    const formData = new FormData(this);
+
+    Swal.fire({
+        title: 'Memproses...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        const res = await fetch('/api/absensi', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await res.json();
+        Swal.close();
+
+        if (data.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Absensi Berhasil',
+                text: data.message,
+                confirmButtonColor: '#F47C20'
+            }).then(() => location.reload());
+        } else {
+            Swal.fire('Gagal', data.message, 'warning');
+        }
+    } catch {
+        Swal.fire('Error', 'Gagal menghubungi server', 'error');
+    }
+});
 </script>
 @endsection
