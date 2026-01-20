@@ -5,76 +5,72 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Absensi;
 use App\Models\PengaturanKantor;
-use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Storage;
 
 class AbsensiController extends Controller
 {
-    /* ======================================================
-     | HALAMAN FORM ABSENSI
-     ====================================================== */
+    /* =====================================================
+     * HALAMAN FORM ABSENSI
+     * ===================================================== */
     public function index()
     {
-        $userId = auth()->id();
-        $hariIni = Carbon::today()->toDateString();
+        $pegawaiId = auth()->user()->id;
+        $hariIni   = Carbon::today()->toDateString();
 
-        $absenMasuk = Absensi::where('user_id', $userId)
+        $absenMasuk = Absensi::where('pegawai_id', $pegawaiId)
             ->where('tanggal', $hariIni)
             ->where('tipe', 'Masuk')
             ->first();
 
-        $absenPulang = Absensi::where('user_id', $userId)
+        $absenPulang = Absensi::where('pegawai_id', $pegawaiId)
             ->where('tanggal', $hariIni)
             ->where('tipe', 'Pulang')
             ->first();
 
-        return view('absensi.form', compact(
-            'absenMasuk',
-            'absenPulang'
-        ));
+        return view('absensi.form', compact('absenMasuk', 'absenPulang'));
     }
 
-    /* ======================================================
-     | SIMPAN ABSENSI (API / AJAX / WEBVIEW)
-     ====================================================== */
+    /* =====================================================
+     * API SIMPAN ABSENSI (WEB + WEBVIEW)
+     * ===================================================== */
     public function simpanAjax(Request $request)
     {
         try {
-
-            /* ================= VALIDASI ================= */
             $request->validate([
                 'tipe'      => 'required|in:Masuk,Pulang',
+                'foto'      => 'required|image|mimes:jpg,jpeg,png',
                 'latitude'  => 'required',
                 'longitude' => 'required',
-                'foto'      => 'required|image|max:4096',
             ]);
 
-            $user = auth()->user();
-            $hariIni = Carbon::today()->toDateString();
-            $jamSekarang = Carbon::now()->format('H:i:s');
+            $pegawaiId = auth()->user()->id;
+            $hariIni   = Carbon::today()->toDateString();
+            $jam       = Carbon::now()->format('H:i:s');
 
-            /* ================= CEK DUPLIKASI ================= */
-            $cek = Absensi::where('user_id', $user->id)
+            // ❌ CEK DOUBLE ABSEN
+            $sudahAda = Absensi::where('pegawai_id', $pegawaiId)
                 ->where('tanggal', $hariIni)
                 ->where('tipe', $request->tipe)
-                ->first();
+                ->exists();
 
-            if ($cek) {
+            if ($sudahAda) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Anda sudah absen ' . strtoupper($request->tipe) . ' hari ini'
-                ]);
+                    'message' => "Anda sudah absen {$request->tipe} hari ini"
+                ], 422);
             }
 
-            /* ================= VALIDASI LOKASI ================= */
+            // 📍 AMBIL DATA KANTOR
             $kantor = PengaturanKantor::first();
             if (!$kantor) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Lokasi kantor belum diatur'
-                ]);
+                    'message' => 'Lokasi kantor belum diatur admin'
+                ], 500);
             }
 
+            // 📏 HITUNG JARAK (HAVERSINE)
             $jarak = $this->hitungJarak(
                 $request->latitude,
                 $request->longitude,
@@ -86,37 +82,30 @@ class AbsensiController extends Controller
                 return response()->json([
                     'success' => false,
                     'message' => 'Anda berada di luar radius absensi'
-                ]);
+                ], 403);
             }
 
-            /* ================= VALIDASI FOTO (ANTI GALERI) ================= */
-            $exif = @exif_read_data($request->file('foto')->getRealPath());
-            if (!$exif || empty($exif['Make'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Foto harus diambil dari kamera'
-                ]);
-            }
-
-            /* ================= SIMPAN FOTO ================= */
-            $pathFoto = $request->file('foto')
+            // 📸 SIMPAN FOTO
+            $fotoPath = $request->file('foto')
                 ->store('absensi', 'public');
 
-            /* ================= SIMPAN ABSENSI ================= */
+            // 💾 SIMPAN DATABASE
             Absensi::create([
-                'user_id'   => $user->id,
-                'tanggal'   => $hariIni,
-                'jam'       => $jamSekarang,
-                'tipe'      => $request->tipe,
-                'latitude'  => $request->latitude,
-                'longitude' => $request->longitude,
-                'foto'      => $pathFoto,
+                'pegawai_id' => $pegawaiId,
+                'tanggal'    => $hariIni,
+                'jam'        => $jam,
+                'foto'       => $fotoPath,
+                'latitude'   => $request->latitude,
+                'longitude'  => $request->longitude,
+                'jarak'      => round($jarak),
+                'status'     => 'Hadir',
+                'tipe'       => $request->tipe,
             ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Absensi ' . strtoupper($request->tipe) . ' berhasil',
-                'jam'     => $jamSekarang
+                'message' => "Absensi {$request->tipe} berhasil",
+                'jam'     => $jam
             ]);
 
         } catch (\Throwable $e) {
@@ -128,20 +117,19 @@ class AbsensiController extends Controller
         }
     }
 
-    /* ======================================================
-     | HITUNG JARAK (HAVERSINE)
-     ====================================================== */
+    /* =====================================================
+     * HITUNG JARAK (METER)
+     * ===================================================== */
     private function hitungJarak($lat1, $lon1, $lat2, $lon2)
     {
         $R = 6371000;
         $dLat = deg2rad($lat2 - $lat1);
         $dLon = deg2rad($lon2 - $lon1);
 
-        $a = sin($dLat / 2) * sin($dLat / 2) +
+        $a = sin($dLat/2) * sin($dLat/2) +
              cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
-             sin($dLon / 2) * sin($dLon / 2);
+             sin($dLon/2) * sin($dLon/2);
 
-        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-        return $R * $c;
+        return $R * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 }
