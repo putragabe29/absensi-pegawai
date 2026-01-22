@@ -39,7 +39,8 @@ Route::middleware('auth')->group(function () {
     // SUBMIT ABSENSI WEBVIEW / AJAX
     Route::post('/absensi/ajax', [AbsensiController::class, 'simpanAjax'])
         ->name('absen.simpanAjax');
-
+  Route::post('/absensi/store', [AbsensiController::class, 'store'])
+        ->name('absensi.store');
     // RIWAYAT & KALENDER
     Route::get('/riwayat', [AbsensiController::class, 'riwayatPegawai'])
         ->name('pegawai.riwayat');

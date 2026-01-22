@@ -11,21 +11,20 @@ use App\Models\PengaturanKantor;
 |--------------------------------------------------------------------------
 */
 
-// LOGIN API
-Route::post('/login', [AuthController::class, 'apiLogin'])
-    ->name('api.login');
+Route::post('/login', [AuthController::class, 'apiLogin']);
 
-// ABSENSI API (WAJIB LOGIN)
-Route::middleware('auth')->post('/absensi', [AbsensiController::class, 'store'])
-    ->name('api.absensi');
+Route::post('/absensi', [AbsensiController::class, 'simpanAjax'])
+    ->withoutMiddleware([
+        \App\Http\Middleware\Authenticate::class,
+        \Illuminate\Auth\Middleware\Authenticate::class,
+    ]);
 
-// LOKASI KANTOR
 Route::get('/lokasi-kantor', function () {
     $kantor = PengaturanKantor::first();
 
     return response()->json([
-        'latitude'  => (float) ($kantor->latitude ?? 0),
-        'longitude' => (float) ($kantor->longitude ?? 0),
-        'radius'    => (int)   ($kantor->radius ?? 0),
+        'latitude'  => (float) $kantor->latitude,
+        'longitude' => (float) $kantor->longitude,
+        'radius'    => (int) $kantor->radius,
     ]);
 });
