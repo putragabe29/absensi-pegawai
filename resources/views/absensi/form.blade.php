@@ -85,6 +85,16 @@
 let kantor, map, markerUser, circleRadius;
 let gpsReady = false;
 
+// ambil element sekali
+const elLat   = document.getElementById('latitude');
+const elLng   = document.getElementById('longitude');
+const elLok   = document.getElementById('lokasi-info');
+const elRad   = document.getElementById('radius-info');
+const elJarak = document.getElementById('jarak-info');
+const btn     = document.getElementById('btnSubmit');
+const foto    = document.getElementById('foto');
+const form    = document.getElementById('formAbsensi');
+
 /* ================= POPUP STATUS ================= */
 document.addEventListener('DOMContentLoaded', () => {
     @if($absenMasuk && $absenPulang)
@@ -106,12 +116,9 @@ fetch('/api/lokasi-kantor')
 
 /* ================= MAP ================= */
 function initMap() {
-    map = L.map('map').setView(
-        [kantor.latitude, kantor.longitude], 17
-    );
+    map = L.map('map').setView([kantor.latitude, kantor.longitude], 17);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
-      .addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
     L.marker([kantor.latitude, kantor.longitude])
       .addTo(map)
@@ -126,39 +133,49 @@ function initMap() {
 }
 
 /* ================= GPS ================= */
-navigator.geolocation.watchPosition(
-    pos => {
-        gpsReady = true;
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
+function startGPS() {
+    if (!navigator.geolocation) {
+        Swal.fire('Error','Browser tidak mendukung GPS','error');
+        return;
+    }
 
-        latitude.value = lat;
-        longitude.value = lng;
+    navigator.geolocation.watchPosition(
+        pos => {
+            gpsReady = true;
 
-        if (!markerUser) {
-            markerUser = L.marker([lat,lng]).addTo(map);
-        } else {
-            markerUser.setLatLng([lat,lng]);
-        }
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
 
-        const jarak = hitungJarak(lat,lng,kantor.latitude,kantor.longitude);
+            elLat.value = lat;
+            elLng.value = lng;
 
-        lokasi-info.innerText = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-        jarak-info.innerText = `📏 Jarak: ${Math.round(jarak)} meter`;
+            if (!markerUser) {
+                markerUser = L.marker([lat,lng]).addTo(map);
+            } else {
+                markerUser.setLatLng([lat,lng]);
+            }
 
-        if (jarak <= kantor.radius) {
-            radius-info.innerHTML = '🟢 Dalam radius absensi';
-            radius-info.className = 'text-success fw-bold';
-            btnSubmit.disabled = false;
-        } else {
-            radius-info.innerHTML = '🔴 Di luar radius absensi';
-            radius-info.className = 'text-danger fw-bold';
-            btnSubmit.disabled = true;
-        }
-    },
-    () => Swal.fire('Error','Aktifkan GPS','error'),
-    { enableHighAccuracy:true }
-);
+            const jarak = hitungJarak(lat,lng,kantor.latitude,kantor.longitude);
+
+            elLok.innerText   = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            elJarak.innerText = `📏 Jarak: ${Math.round(jarak)} meter`;
+
+            if (jarak <= kantor.radius) {
+                elRad.innerHTML = '🟢 Dalam radius absensi';
+                elRad.className = 'text-success fw-bold';
+                circleRadius.setStyle({color:'green'});
+                btn.disabled = false;
+            } else {
+                elRad.innerHTML = '🔴 Di luar radius absensi';
+                elRad.className = 'text-danger fw-bold';
+                circleRadius.setStyle({color:'red'});
+                btn.disabled = true;
+            }
+        },
+        () => Swal.fire('Error','Aktifkan GPS & izinkan lokasi','error'),
+        { enableHighAccuracy:true }
+    );
+}
 
 /* ================= JARAK ================= */
 function hitungJarak(lat1, lon1, lat2, lon2) {
@@ -174,7 +191,7 @@ function hitungJarak(lat1, lon1, lat2, lon2) {
 }
 
 /* ================= SUBMIT ================= */
-formAbsensi.addEventListener('submit', async e => {
+form.addEventListener('submit', async e => {
     e.preventDefault();
 
     if (!gpsReady) {
@@ -183,17 +200,17 @@ formAbsensi.addEventListener('submit', async e => {
     }
 
     if (!foto.files.length) {
-        Swal.fire('Gagal','Foto wajib dari kamera','warning');
+        Swal.fire('Gagal','Foto wajib diambil dari kamera','warning');
         return;
     }
 
-    Swal.fire({title:'Mengirim...',didOpen:()=>Swal.showLoading(),allowOutsideClick:false});
+    Swal.fire({title:'Mengirim...',allowOutsideClick:false,didOpen:()=>Swal.showLoading()});
 
     try {
-        const res = await fetch('/absensi/store', {
+        const res = await fetch('{{ route("absensi.store") }}', {
             method: 'POST',
             headers: {'X-CSRF-TOKEN': '{{ csrf_token() }}'},
-            body: new FormData(formAbsensi)
+            body: new FormData(form)
         });
 
         const data = await res.json();
